@@ -16,7 +16,7 @@ public interface IOutputFormatter
     /// <param name="options">検索オプション</param>
     /// <param name="writer">出力ライター</param>
     /// <returns>終了コード</returns>
-    Task<int> FormatOutputAsync(SearchResult result, DynamicOptions options, TextWriter writer);
+    Task<int> FormatOutputAsync(SearchResult result, IDynamicOptions options, TextWriter writer);
 }
 
 /// <summary>
@@ -24,7 +24,7 @@ public interface IOutputFormatter
 /// </summary>
 public class PosixOutputFormatter : IOutputFormatter
 {
-    public async Task<int> FormatOutputAsync(SearchResult result, DynamicOptions options, TextWriter writer)
+    public async Task<int> FormatOutputAsync(SearchResult result, IDynamicOptions options, TextWriter writer)
     {
         var hasMatches = result.TotalMatches > 0;
         
@@ -51,7 +51,7 @@ public class PosixOutputFormatter : IOutputFormatter
         return hasMatches ? 0 : 1;
     }
 
-    private async Task FormatCountOnlyAsync(SearchResult result, DynamicOptions options, TextWriter writer)
+    private async Task FormatCountOnlyAsync(SearchResult result, IDynamicOptions options, TextWriter writer)
     {
         var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
         var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
@@ -71,7 +71,7 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatFilenameOnlyAsync(SearchResult result, DynamicOptions options, TextWriter writer)
+    private async Task FormatFilenameOnlyAsync(SearchResult result, IDynamicOptions options, TextWriter writer)
     {
         foreach (var fileResult in result.SuccessfulResults.Where(r => r.HasMatches))
         {
@@ -79,7 +79,7 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatNormalOutputAsync(SearchResult result, DynamicOptions options, TextWriter writer)
+    private async Task FormatNormalOutputAsync(SearchResult result, IDynamicOptions options, TextWriter writer)
     {
         foreach (var fileResult in result.SuccessfulResults.Where(r => r.HasMatches))
         {
@@ -87,7 +87,7 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatFileResultAsync(FileResult fileResult, DynamicOptions options, TextWriter writer)
+    private async Task FormatFileResultAsync(FileResult fileResult, IDynamicOptions options, TextWriter writer)
     {
         var contextBefore = options.GetIntValue("Context") ?? options.GetIntValue("ContextBefore") ?? 0;
         var contextAfter = options.GetIntValue("Context") ?? options.GetIntValue("ContextAfter") ?? 0;
@@ -114,7 +114,7 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatMatchAsync(MatchResult match, DynamicOptions options, TextWriter writer)
+    private async Task FormatMatchAsync(MatchResult match, IDynamicOptions options, TextWriter writer)
     {
         var output = new StringBuilder();
         

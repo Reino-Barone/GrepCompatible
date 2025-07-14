@@ -17,7 +17,7 @@ public class MatchStrategyFactory : IMatchStrategyFactory
         RegisterStrategy(new RegexMatchStrategy());
     }
     
-    public IMatchStrategy CreateStrategy(DynamicOptions options)
+    public IMatchStrategy CreateStrategy(IDynamicOptions options)
     {
         // 優先度順で適用可能な戦略を選択
         var applicableStrategy = _strategies.FirstOrDefault(s => s.CanApply(options));

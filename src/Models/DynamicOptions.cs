@@ -6,7 +6,7 @@ namespace GrepCompatible.Models;
 /// <summary>
 /// 動的オプションクラス - 明示的なプロパティを持たず、List<Option>を使用
 /// </summary>
-public class DynamicOptions
+public class DynamicOptions : IDynamicOptions
 {
     private readonly List<Option> _options = [];
     private readonly List<Argument> _arguments = [];
