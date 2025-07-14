@@ -32,60 +32,35 @@ public interface IOptionContext
     /// <summary>
     /// 指定された名前のオプションを取得
     /// </summary>
-    T? GetOption<T>(string name) where T : Option;
+    T? GetOption<T>(OptionNames name) where T : Option;
 
     /// <summary>
     /// 指定された名前の引数を取得
     /// </summary>
-    T? GetArgument<T>(string name) where T : Argument;
-
-    /// <summary>
-    /// フラグオプションの値を取得（列挙体版）
-    /// </summary>
-    bool GetFlagValue(OptionNames optionName);
+    T? GetArgument<T>(ArgumentNames name) where T : Argument;
 
     /// <summary>
     /// フラグオプションの値を取得
     /// </summary>
-    bool GetFlagValue(string name);
-
-    /// <summary>
-    /// 文字列オプションの値を取得（列挙体版）
-    /// </summary>
-    string? GetStringValue(OptionNames optionName);
+    bool GetFlagValue(OptionNames optionName);
 
     /// <summary>
     /// 文字列オプションの値を取得
     /// </summary>
-    string? GetStringValue(string name);
-
-    /// <summary>
-    /// 整数オプションの値を取得（列挙体版）
-    /// </summary>
-    int? GetIntValue(OptionNames optionName);
+    string? GetStringValue(OptionNames optionName);
 
     /// <summary>
     /// 整数オプションの値を取得
     /// </summary>
-    int? GetIntValue(string name);
-
-    /// <summary>
-    /// 文字列引数の値を取得（列挙体版）
-    /// </summary>
-    string? GetStringArgumentValue(ArgumentNames argumentName);
+    int? GetIntValue(OptionNames optionName);
 
     /// <summary>
     /// 文字列引数の値を取得
     /// </summary>
-    string? GetStringArgumentValue(string name);
-
-    /// <summary>
-    /// 文字列リスト引数の値を取得（列挙体版）
-    /// </summary>
-    IReadOnlyList<string>? GetStringListArgumentValue(ArgumentNames argumentName);
+    string? GetStringArgumentValue(ArgumentNames argumentName);
 
     /// <summary>
     /// 文字列リスト引数の値を取得
     /// </summary>
-    IReadOnlyList<string>? GetStringListArgumentValue(string name);
+    IReadOnlyList<string>? GetStringListArgumentValue(ArgumentNames argumentName);
 }

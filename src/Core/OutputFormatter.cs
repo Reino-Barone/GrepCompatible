@@ -89,8 +89,8 @@ public class PosixOutputFormatter : IOutputFormatter
 
     private async Task FormatFileResultAsync(FileResult fileResult, IOptionContext options, TextWriter writer)
     {
-        var contextBefore = options.GetIntValue("Context") ?? options.GetIntValue("ContextBefore") ?? 0;
-        var contextAfter = options.GetIntValue("Context") ?? options.GetIntValue("ContextAfter") ?? 0;
+        var contextBefore = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextBefore) ?? 0;
+        var contextAfter = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextAfter) ?? 0;
         
         if (contextBefore == 0 && contextAfter == 0)
         {

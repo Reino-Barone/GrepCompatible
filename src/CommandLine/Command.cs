@@ -1,3 +1,5 @@
+using GrepCompatible.Constants;
+
 namespace GrepCompatible.CommandLine;
 
 /// <summary>
@@ -40,9 +42,14 @@ public abstract class Command
     public IReadOnlyList<Argument> Arguments { get; }
     
     /// <summary>
-    /// オプション名からオプションへのマッピング
+    /// オプション名からオプションへのマッピング（文字列キー）
     /// </summary>
     private readonly Dictionary<string, Option> _optionMap = [];
+    
+    /// <summary>
+    /// オプション名からオプションへのマッピング（列挙体キー）
+    /// </summary>
+    private readonly Dictionary<OptionNames, Option> _optionNameMap = [];
     
     /// <summary>
     /// 引数のインデックス
@@ -63,6 +70,9 @@ public abstract class Command
                 _optionMap[option.ShortName] = option;
             if (option.LongName != null)
                 _optionMap[option.LongName] = option;
+            
+            // 列挙体キーでもマッピング
+            _optionNameMap[option.Name] = option;
         }
     }
     
@@ -268,5 +278,27 @@ public abstract class Command
         }
         
         return string.Join(Environment.NewLine, help);
+    }
+    
+    /// <summary>
+    /// オプション名（列挙体）でオプションを取得
+    /// </summary>
+    /// <typeparam name="T">オプションの型</typeparam>
+    /// <param name="name">オプション名</param>
+    /// <returns>オプション</returns>
+    protected T? GetOption<T>(OptionNames name) where T : Option
+    {
+        return _optionNameMap.TryGetValue(name, out var option) ? option as T : null;
+    }
+    
+    /// <summary>
+    /// 引数名（列挙体）で引数を取得
+    /// </summary>
+    /// <typeparam name="T">引数の型</typeparam>
+    /// <param name="name">引数名</param>
+    /// <returns>引数</returns>
+    protected T? GetArgument<T>(ArgumentNames name) where T : Argument
+    {
+        return Arguments.OfType<T>().FirstOrDefault(a => a.Name == name);
     }
 }

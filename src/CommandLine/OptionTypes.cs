@@ -1,3 +1,5 @@
+using GrepCompatible.Constants;
+
 namespace GrepCompatible.CommandLine;
 
 /// <summary>
@@ -5,7 +7,7 @@ namespace GrepCompatible.CommandLine;
 /// </summary>
 public class FlagOption : Option<bool>
 {
-    public FlagOption(string name, string description, bool defaultValue = false, 
+    public FlagOption(OptionNames name, string description, bool defaultValue = false, 
                      string? shortName = null, string? longName = null) 
         : base(name, description, defaultValue, shortName, longName)
     {
@@ -30,7 +32,7 @@ public class FlagOption : Option<bool>
 /// </summary>
 public class StringOption : Option<string>
 {
-    public StringOption(string name, string description, string defaultValue = "", 
+    public StringOption(OptionNames name, string description, string defaultValue = "", 
                        string? shortName = null, string? longName = null, bool isRequired = false) 
         : base(name, description, defaultValue, shortName, longName, isRequired)
     {
@@ -60,7 +62,7 @@ public class IntegerOption : Option<int>
     public int MinValue { get; }
     public int MaxValue { get; }
     
-    public IntegerOption(string name, string description, int defaultValue = 0, 
+    public IntegerOption(OptionNames name, string description, int defaultValue = 0, 
                         string? shortName = null, string? longName = null, bool isRequired = false,
                         int minValue = int.MinValue, int maxValue = int.MaxValue) 
         : base(name, description, defaultValue, shortName, longName, isRequired)
@@ -107,7 +109,7 @@ public class NullableIntegerOption : Option<int?>
     public int MinValue { get; }
     public int MaxValue { get; }
     
-    public NullableIntegerOption(string name, string description, int? defaultValue = null, 
+    public NullableIntegerOption(OptionNames name, string description, int? defaultValue = null, 
                                 string? shortName = null, string? longName = null, bool isRequired = false,
                                 int minValue = int.MinValue, int maxValue = int.MaxValue) 
         : base(name, description, defaultValue, shortName, longName, isRequired)

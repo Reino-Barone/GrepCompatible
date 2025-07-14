@@ -1,3 +1,5 @@
+using GrepCompatible.Constants;
+
 namespace GrepCompatible.CommandLine;
 
 /// <summary>
@@ -8,7 +10,7 @@ public abstract class Argument
     /// <summary>
     /// 引数の名前
     /// </summary>
-    public string Name { get; }
+    public ArgumentNames Name { get; }
     
     /// <summary>
     /// 引数の説明
@@ -25,7 +27,7 @@ public abstract class Argument
     /// </summary>
     public bool IsSet { get; protected set; }
 
-    protected Argument(string name, string description, bool isRequired = true)
+    protected Argument(ArgumentNames name, string description, bool isRequired = true)
     {
         Name = name;
         Description = description;
@@ -72,7 +74,7 @@ public abstract class Argument<T> : Argument
     /// </summary>
     public T DefaultValue { get; }
 
-    protected Argument(string name, string description, T defaultValue, bool isRequired = true) 
+    protected Argument(ArgumentNames name, string description, T defaultValue, bool isRequired = true) 
         : base(name, description, isRequired)
     {
         DefaultValue = defaultValue;
@@ -94,7 +96,7 @@ public abstract class Argument<T> : Argument
 /// </summary>
 public class StringArgument : Argument<string>
 {
-    public StringArgument(string name, string description, string defaultValue = "", bool isRequired = true) 
+    public StringArgument(ArgumentNames name, string description, string defaultValue = "", bool isRequired = true) 
         : base(name, description, defaultValue, isRequired)
     {
     }
@@ -117,7 +119,7 @@ public class StringListArgument : Argument<IReadOnlyList<string>>
 {
     private readonly List<string> _values = [];
     
-    public StringListArgument(string name, string description, bool isRequired = true) 
+    public StringListArgument(ArgumentNames name, string description, bool isRequired = true) 
         : base(name, description, new List<string>().AsReadOnly(), isRequired)
     {
     }

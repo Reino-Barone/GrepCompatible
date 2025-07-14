@@ -41,7 +41,7 @@ public class DynamicOptions : IOptionContext
     /// <summary>
     /// 指定された名前のオプションを取得
     /// </summary>
-    public T? GetOption<T>(string name) where T : Option
+    public T? GetOption<T>(OptionNames name) where T : Option
     {
         return _options.OfType<T>().FirstOrDefault(o => o.Name == name);
     }
@@ -49,88 +49,48 @@ public class DynamicOptions : IOptionContext
     /// <summary>
     /// 指定された名前の引数を取得
     /// </summary>
-    public T? GetArgument<T>(string name) where T : Argument
+    public T? GetArgument<T>(ArgumentNames name) where T : Argument
     {
         return _arguments.OfType<T>().FirstOrDefault(a => a.Name == name);
     }
 
     /// <summary>
-    /// フラグオプションの値を取得（列挙体版）
+    /// フラグオプションの値を取得
     /// </summary>
     public bool GetFlagValue(OptionNames optionName)
     {
-        return GetFlagValue(optionName.ToString());
-    }
-
-    /// <summary>
-    /// フラグオプションの値を取得
-    /// </summary>
-    public bool GetFlagValue(string name)
-    {
-        return GetOption<FlagOption>(name)?.Value ?? false;
-    }
-
-    /// <summary>
-    /// 文字列オプションの値を取得（列挙体版）
-    /// </summary>
-    public string? GetStringValue(OptionNames optionName)
-    {
-        return GetStringValue(optionName.ToString());
+        return GetOption<FlagOption>(optionName)?.Value ?? false;
     }
 
     /// <summary>
     /// 文字列オプションの値を取得
     /// </summary>
-    public string? GetStringValue(string name)
+    public string? GetStringValue(OptionNames optionName)
     {
-        return GetOption<StringOption>(name)?.Value;
-    }
-
-    /// <summary>
-    /// 整数オプションの値を取得（列挙体版）
-    /// </summary>
-    public int? GetIntValue(OptionNames optionName)
-    {
-        return GetIntValue(optionName.ToString());
+        return GetOption<StringOption>(optionName)?.Value;
     }
 
     /// <summary>
     /// 整数オプションの値を取得
     /// </summary>
-    public int? GetIntValue(string name)
+    public int? GetIntValue(OptionNames optionName)
     {
-        return GetOption<NullableIntegerOption>(name)?.Value;
-    }
-
-    /// <summary>
-    /// 文字列引数の値を取得（列挙体版）
-    /// </summary>
-    public string? GetStringArgumentValue(ArgumentNames argumentName)
-    {
-        return GetStringArgumentValue(argumentName.ToString());
+        return GetOption<NullableIntegerOption>(optionName)?.Value;
     }
 
     /// <summary>
     /// 文字列引数の値を取得
     /// </summary>
-    public string? GetStringArgumentValue(string name)
+    public string? GetStringArgumentValue(ArgumentNames argumentName)
     {
-        return GetArgument<StringArgument>(name)?.Value;
-    }
-
-    /// <summary>
-    /// 文字列リスト引数の値を取得（列挙体版）
-    /// </summary>
-    public IReadOnlyList<string>? GetStringListArgumentValue(ArgumentNames argumentName)
-    {
-        return GetStringListArgumentValue(argumentName.ToString());
+        return GetArgument<StringArgument>(argumentName)?.Value;
     }
 
     /// <summary>
     /// 文字列リスト引数の値を取得
     /// </summary>
-    public IReadOnlyList<string>? GetStringListArgumentValue(string name)
+    public IReadOnlyList<string>? GetStringListArgumentValue(ArgumentNames argumentName)
     {
-        return GetArgument<StringListArgument>(name)?.Value;
+        return GetArgument<StringListArgument>(argumentName)?.Value;
     }
 }

@@ -1,3 +1,5 @@
+using GrepCompatible.Constants;
+
 namespace GrepCompatible.CommandLine;
 
 /// <summary>
@@ -8,7 +10,7 @@ public abstract class Option
     /// <summary>
     /// オプションの名前
     /// </summary>
-    public string Name { get; }
+    public OptionNames Name { get; }
     
     /// <summary>
     /// オプションの説明
@@ -35,7 +37,7 @@ public abstract class Option
     /// </summary>
     public bool IsSet { get; protected set; }
 
-    protected Option(string name, string description, string? shortName = null, string? longName = null, bool isRequired = false)
+    protected Option(OptionNames name, string description, string? shortName = null, string? longName = null, bool isRequired = false)
     {
         Name = name;
         Description = description;
@@ -89,7 +91,7 @@ public abstract class Option<T> : Option
     /// </summary>
     public T DefaultValue { get; }
 
-    protected Option(string name, string description, T defaultValue, 
+    protected Option(OptionNames name, string description, T defaultValue, 
                     string? shortName = null, string? longName = null, bool isRequired = false) 
         : base(name, description, shortName, longName, isRequired)
     {
