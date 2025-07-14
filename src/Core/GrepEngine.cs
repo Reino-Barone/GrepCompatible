@@ -1,3 +1,4 @@
+using GrepCompatible.Constants;
 using GrepCompatible.Models;
 using GrepCompatible.Strategies;
 using System.Collections.Concurrent;
@@ -73,7 +74,8 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
     private async Task<IEnumerable<string>> ExpandFilesAsync(DynamicOptions options, CancellationToken cancellationToken)
     {
         var files = new List<string>();
-        var filesArg = options.GetStringListArgumentValue("Files") ?? new[] { "-" }.ToList().AsReadOnly();
+        var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ?? 
+            new[] { "-" }.ToList().AsReadOnly();
         
         foreach (var filePattern in filesArg)
         {
@@ -83,7 +85,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 continue;
             }
             
-            if (options.GetFlagValue("RecursiveSearch"))
+            if (options.GetFlagValue(OptionNames.RecursiveSearch))
             {
                 var expandedFiles = await ExpandRecursiveAsync(filePattern, options, cancellationToken);
                 files.AddRange(expandedFiles);
@@ -155,7 +157,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         var fileName = Path.GetFileName(filePath);
         
         // 除外パターンのチェック
-        var excludePattern = options.GetStringValue("ExcludePattern");
+        var excludePattern = options.GetStringValue(OptionNames.ExcludePattern);
         if (excludePattern != null)
         {
             var excludeRegex = new Regex(excludePattern, RegexOptions.IgnoreCase);
@@ -164,7 +166,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         }
         
         // 包含パターンのチェック
-        var includePattern = options.GetStringValue("IncludePattern");
+        var includePattern = options.GetStringValue(OptionNames.IncludePattern);
         if (includePattern != null)
         {
             var includeRegex = new Regex(includePattern, RegexOptions.IgnoreCase);
@@ -189,9 +191,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 return await ProcessStandardInputAsync(strategy, options, cancellationToken);
             }
             
-            var pattern = options.GetStringArgumentValue("Pattern") ?? "";
-            var invertMatch = options.GetFlagValue("InvertMatch");
-            var maxCount = options.GetIntValue("MaxCount");
+            var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
+            var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
+            var maxCount = options.GetIntValue(OptionNames.MaxCount);
             
             // ファイルの処理（大きなファイルでもメモリ効率的）
             using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
@@ -245,9 +247,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         var matchCount = 0;
         const string fileName = "(standard input)";
         
-        var pattern = options.GetStringArgumentValue("Pattern") ?? "";
-        var invertMatch = options.GetFlagValue("InvertMatch");
-        var maxCount = options.GetIntValue("MaxCount");
+        var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
+        var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
+        var maxCount = options.GetIntValue(OptionNames.MaxCount);
         
         try
         {

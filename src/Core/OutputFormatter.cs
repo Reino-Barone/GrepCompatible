@@ -1,3 +1,4 @@
+using GrepCompatible.Constants;
 using GrepCompatible.Models;
 using System.Text;
 
@@ -28,18 +29,18 @@ public class PosixOutputFormatter : IOutputFormatter
         var hasMatches = result.TotalMatches > 0;
         
         // サイレントモードの場合は何も出力しない
-        if (options.GetFlagValue("SilentMode"))
+        if (options.GetFlagValue(OptionNames.SilentMode))
             return hasMatches ? 0 : 1;
         
         // カウントのみモード
-        if (options.GetFlagValue("CountOnly"))
+        if (options.GetFlagValue(OptionNames.CountOnly))
         {
             await FormatCountOnlyAsync(result, options, writer);
             return hasMatches ? 0 : 1;
         }
         
         // ファイル名のみモード
-        if (options.GetFlagValue("FilenameOnly"))
+        if (options.GetFlagValue(OptionNames.FilenameOnly))
         {
             await FormatFilenameOnlyAsync(result, options, writer);
             return hasMatches ? 0 : 1;
@@ -52,9 +53,9 @@ public class PosixOutputFormatter : IOutputFormatter
 
     private async Task FormatCountOnlyAsync(SearchResult result, DynamicOptions options, TextWriter writer)
     {
-        var files = options.GetStringListArgumentValue("Files") ?? new[] { "-" }.ToList().AsReadOnly();
-        var suppressFilename = options.GetFlagValue("SuppressFilename");
-        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue("FilenameOnly"));
+        var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
+        var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
+        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
         
         foreach (var fileResult in result.SuccessfulResults)
         {
@@ -117,9 +118,9 @@ public class PosixOutputFormatter : IOutputFormatter
     {
         var output = new StringBuilder();
         
-        var files = options.GetStringListArgumentValue("Files") ?? new[] { "-" }.ToList().AsReadOnly();
-        var suppressFilename = options.GetFlagValue("SuppressFilename");
-        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue("FilenameOnly"));
+        var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
+        var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
+        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
         
         // ファイル名
         if (shouldShowFilename)
@@ -128,7 +129,7 @@ public class PosixOutputFormatter : IOutputFormatter
         }
         
         // 行番号
-        if (options.GetFlagValue("LineNumber"))
+        if (options.GetFlagValue(OptionNames.LineNumber))
         {
             output.Append($"{match.LineNumber}:");
         }
