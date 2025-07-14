@@ -104,32 +104,24 @@ public class GrepCommand : Command
     }
     
     /// <summary>
-    /// 現在の設定からGrepOptionsを構築
+    /// 現在の設定からDynamicOptionsを構築
     /// </summary>
-    public GrepOptions ToGrepOptions()
+    public DynamicOptions ToDynamicOptions()
     {
-        var files = Files.Value.Count > 0 ? Files.Value : new[] { "-" }.ToList().AsReadOnly();
+        var dynamicOptions = new DynamicOptions();
         
-        return new GrepOptions(
-            Pattern: Pattern.Value,
-            Files: files,
-            IgnoreCase: IgnoreCase.Value,
-            InvertMatch: InvertMatch.Value,
-            LineNumber: LineNumber.Value,
-            CountOnly: CountOnly.Value,
-            FilenameOnly: FilenameOnly.Value,
-            SuppressFilename: SuppressFilename.Value,
-            SilentMode: SilentMode.Value,
-            ExtendedRegexp: ExtendedRegexp.Value,
-            FixedStrings: FixedStrings.Value,
-            WholeWord: WholeWord.Value,
-            RecursiveSearch: RecursiveSearch.Value,
-            ExcludePattern: string.IsNullOrEmpty(ExcludePattern.Value) ? null : ExcludePattern.Value,
-            IncludePattern: string.IsNullOrEmpty(IncludePattern.Value) ? null : IncludePattern.Value,
-            MaxCount: MaxCount.Value,
-            ContextBefore: ContextBefore.Value,
-            ContextAfter: ContextAfter.Value,
-            Context: Context.Value
-        );
+        // オプションを追加
+        foreach (var option in Options)
+        {
+            dynamicOptions.AddOption(option);
+        }
+        
+        // 引数を追加
+        foreach (var argument in Arguments)
+        {
+            dynamicOptions.AddArgument(argument);
+        }
+        
+        return dynamicOptions;
     }
 }

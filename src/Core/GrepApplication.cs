@@ -1,5 +1,6 @@
 using GrepCompatible.CommandLine;
 using GrepCompatible.Core;
+using GrepCompatible.Models;
 using GrepCompatible.Strategies;
 
 namespace GrepCompatible.Core;
@@ -53,7 +54,9 @@ public class GrepApplication
                 return 2;
             }
             
-            var options = _command.ToGrepOptions();
+            var dynamicOptions = _command.ToDynamicOptions();
+            var grepHelper = dynamicOptions.ToGrepOptionsHelper();
+            var options = grepHelper.ToGrepOptions(); // 一時的な互換性のため
             var searchResult = await _engine.SearchAsync(options, cancellationToken);
             
             return await _formatter.FormatOutputAsync(searchResult, options, Console.Out);
