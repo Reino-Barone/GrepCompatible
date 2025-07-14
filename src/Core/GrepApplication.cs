@@ -1,5 +1,6 @@
+using GrepCompatible.CommandLine;
 using GrepCompatible.Core;
-using GrepCompatible.Parsers;
+using GrepCompatible.Models;
 using GrepCompatible.Strategies;
 
 namespace GrepCompatible.Core;
@@ -9,16 +10,16 @@ namespace GrepCompatible.Core;
 /// </summary>
 public class GrepApplication
 {
-    private readonly ICommandLineParser _parser;
+    private readonly GrepCommand _command;
     private readonly IGrepEngine _engine;
     private readonly IOutputFormatter _formatter;
 
     public GrepApplication(
-        ICommandLineParser parser,
+        GrepCommand command,
         IGrepEngine engine,
         IOutputFormatter formatter)
     {
-        _parser = parser ?? throw new ArgumentNullException(nameof(parser));
+        _command = command ?? throw new ArgumentNullException(nameof(command));
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
     }
@@ -33,11 +34,17 @@ public class GrepApplication
     {
         try
         {
-            var parseResult = _parser.ParseArguments(args);
+            if (args.Length == 0)
+            {
+                await Console.Error.WriteLineAsync("No arguments provided");
+                return 2;
+            }
+            
+            var parseResult = _command.Parse(args);
             
             if (parseResult.ShowHelp)
             {
-                await Console.Out.WriteLineAsync(PosixCommandLineParser.GetHelpText());
+                await Console.Out.WriteLineAsync(_command.GetHelpText());
                 return 0;
             }
             
@@ -47,10 +54,10 @@ public class GrepApplication
                 return 2;
             }
             
-            var options = parseResult.Options!;
-            var searchResult = await _engine.SearchAsync(options, cancellationToken);
+            var dynamicOptions = _command.ToDynamicOptions();
+            var searchResult = await _engine.SearchAsync(dynamicOptions, cancellationToken);
             
-            return await _formatter.FormatOutputAsync(searchResult, options, Console.Out);
+            return await _formatter.FormatOutputAsync(searchResult, dynamicOptions, Console.Out);
         }
         catch (OperationCanceledException)
         {
@@ -69,11 +76,11 @@ public class GrepApplication
     /// <returns>設定済みのアプリケーション</returns>
     public static GrepApplication CreateDefault()
     {
-        var parser = new PosixCommandLineParser();
+        var command = new GrepCommand();
         var strategyFactory = new MatchStrategyFactory();
         var engine = new ParallelGrepEngine(strategyFactory);
         var formatter = new PosixOutputFormatter();
         
-        return new GrepApplication(parser, engine, formatter);
+        return new GrepApplication(command, engine, formatter);
     }
 }

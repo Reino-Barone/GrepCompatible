@@ -1,25 +1,12 @@
 using GrepCompatible.Models;
 
-namespace GrepCompatible.Parsers;
-
-/// <summary>
-/// コマンドライン引数パーサーのインターフェース
-/// </summary>
-public interface ICommandLineParser
-{
-    /// <summary>
-    /// コマンドライン引数をパース
-    /// </summary>
-    /// <param name="args">コマンドライン引数</param>
-    /// <returns>パース結果</returns>
-    ParseResult ParseArguments(string[] args);
-}
+namespace GrepCompatible.CommandLine;
 
 /// <summary>
 /// パース結果を表現するレコード
 /// </summary>
 public record ParseResult(
-    GrepOptions? Options,
+    DynamicOptions? Options,
     bool IsSuccess,
     string? ErrorMessage = null,
     bool ShowHelp = false
@@ -28,7 +15,7 @@ public record ParseResult(
     /// <summary>
     /// 成功したパース結果を作成
     /// </summary>
-    public static ParseResult Success(GrepOptions options) => new(options, true);
+    public static ParseResult Success(DynamicOptions options) => new(options, true);
     
     /// <summary>
     /// エラーのパース結果を作成

@@ -14,14 +14,14 @@ public interface IMatchStrategy
     /// <param name="pattern">検索パターン</param>
     /// <param name="options">検索オプション</param>
     /// <returns>マッチした場合はマッチ情報、そうでなければnull</returns>
-    IEnumerable<MatchResult> FindMatches(string line, string pattern, GrepOptions options, string fileName, int lineNumber);
+    IEnumerable<MatchResult> FindMatches(string line, string pattern, IOptionContext options, string fileName, int lineNumber);
     
     /// <summary>
     /// この戦略が指定されたオプションに適用可能かどうかを判定
     /// </summary>
     /// <param name="options">検索オプション</param>
     /// <returns>適用可能な場合はtrue</returns>
-    bool CanApply(GrepOptions options);
+    bool CanApply(IOptionContext options);
 }
 
 /// <summary>
@@ -34,7 +34,7 @@ public interface IMatchStrategyFactory
     /// </summary>
     /// <param name="options">検索オプション</param>
     /// <returns>適切な戦略</returns>
-    IMatchStrategy CreateStrategy(GrepOptions options);
+    IMatchStrategy CreateStrategy(IOptionContext options);
     
     /// <summary>
     /// 新しい戦略を登録
