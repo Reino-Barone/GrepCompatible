@@ -10,9 +10,9 @@ namespace GrepCompatible.Strategies;
 /// </summary>
 public class FixedStringMatchStrategy : IMatchStrategy
 {
-    public bool CanApply(IDynamicOptions options) => options.GetFlagValue(OptionNames.FixedStrings);
+    public bool CanApply(IOptionContext options) => options.GetFlagValue(OptionNames.FixedStrings);
 
-    public IEnumerable<MatchResult> FindMatches(string line, string pattern, IDynamicOptions options, string fileName, int lineNumber)
+    public IEnumerable<MatchResult> FindMatches(string line, string pattern, IOptionContext options, string fileName, int lineNumber)
     {
         var comparison = options.GetFlagValue(OptionNames.IgnoreCase) ? 
             StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
@@ -48,12 +48,12 @@ public class RegexMatchStrategy : IMatchStrategy
 {
     private readonly ConcurrentDictionary<string, Regex> _regexCache = new();
 
-    public bool CanApply(IDynamicOptions options) => 
+    public bool CanApply(IOptionContext options) => 
         options.GetFlagValue(OptionNames.ExtendedRegexp) || 
         (!options.GetFlagValue(OptionNames.FixedStrings) && 
          !options.GetFlagValue(OptionNames.WholeWord));
 
-    public IEnumerable<MatchResult> FindMatches(string line, string pattern, IDynamicOptions options, string fileName, int lineNumber)
+    public IEnumerable<MatchResult> FindMatches(string line, string pattern, IOptionContext options, string fileName, int lineNumber)
     {
         var regexOptions = RegexOptions.Compiled;
         if (options.GetFlagValue(OptionNames.IgnoreCase))
@@ -95,9 +95,9 @@ public class RegexMatchStrategy : IMatchStrategy
 /// </summary>
 public class WholeWordMatchStrategy : IMatchStrategy
 {
-    public bool CanApply(IDynamicOptions options) => options.GetFlagValue(OptionNames.WholeWord);
+    public bool CanApply(IOptionContext options) => options.GetFlagValue(OptionNames.WholeWord);
 
-    public IEnumerable<MatchResult> FindMatches(string line, string pattern, IDynamicOptions options, string fileName, int lineNumber)
+    public IEnumerable<MatchResult> FindMatches(string line, string pattern, IOptionContext options, string fileName, int lineNumber)
     {
         var regexOptions = RegexOptions.Compiled;
         if (options.GetFlagValue(OptionNames.IgnoreCase))

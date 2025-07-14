@@ -19,7 +19,7 @@ public interface IGrepEngine
     /// <param name="options">検索オプション</param>
     /// <param name="cancellationToken">キャンセレーショントークン</param>
     /// <returns>検索結果</returns>
-    Task<SearchResult> SearchAsync(IDynamicOptions options, CancellationToken cancellationToken = default);
+    Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -29,7 +29,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
 {
     private readonly IMatchStrategyFactory _strategyFactory = strategyFactory ?? throw new ArgumentNullException(nameof(strategyFactory));
 
-    public async Task<SearchResult> SearchAsync(IDynamicOptions options, CancellationToken cancellationToken = default)
+    public async Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
         var strategy = _strategyFactory.CreateStrategy(options);
@@ -71,7 +71,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         }
     }
 
-    private async Task<IEnumerable<string>> ExpandFilesAsync(IDynamicOptions options, CancellationToken cancellationToken)
+    private async Task<IEnumerable<string>> ExpandFilesAsync(IOptionContext options, CancellationToken cancellationToken)
     {
         var files = new List<string>();
         var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ?? 
@@ -105,7 +105,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         return files.Distinct();
     }
 
-    private Task<IEnumerable<string>> ExpandRecursiveAsync(string path, IDynamicOptions options, CancellationToken cancellationToken)
+    private Task<IEnumerable<string>> ExpandRecursiveAsync(string path, IOptionContext options, CancellationToken cancellationToken)
     {
         var files = new List<string>();
         
@@ -152,7 +152,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         return [pattern];
     }
 
-    private static bool ShouldIncludeFile(string filePath, IDynamicOptions options)
+    private static bool ShouldIncludeFile(string filePath, IOptionContext options)
     {
         var fileName = Path.GetFileName(filePath);
         
@@ -177,7 +177,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         return true;
     }
 
-    private async Task<FileResult> ProcessFileAsync(string filePath, IMatchStrategy strategy, IDynamicOptions options, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessFileAsync(string filePath, IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
     {
         try
         {
@@ -240,7 +240,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         }
     }
 
-    private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IDynamicOptions options, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
     {
         var matches = new List<MatchResult>();
         var lineNumber = 0;

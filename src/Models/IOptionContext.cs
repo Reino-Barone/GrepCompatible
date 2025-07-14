@@ -4,9 +4,10 @@ using GrepCompatible.Constants;
 namespace GrepCompatible.Models;
 
 /// <summary>
-/// 動的オプションクラスのインターフェース
+/// オプションコンテキストのインターフェース
+/// コマンドラインオプションと引数の管理とアクセスを提供
 /// </summary>
-public interface IDynamicOptions
+public interface IOptionContext
 {
     /// <summary>
     /// オプションのリスト

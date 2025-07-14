@@ -4,9 +4,10 @@ using GrepCompatible.Constants;
 namespace GrepCompatible.Models;
 
 /// <summary>
-/// 動的オプションクラス - 明示的なプロパティを持たず、List<Option>を使用
+/// オプションコンテキストの実装クラス
+/// 明示的なプロパティを持たず、List<Option>とList<Argument>を使用した動的管理
 /// </summary>
-public class DynamicOptions : IDynamicOptions
+public class DynamicOptions : IOptionContext
 {
     private readonly List<Option> _options = [];
     private readonly List<Argument> _arguments = [];
