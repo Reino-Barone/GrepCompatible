@@ -55,11 +55,9 @@ public class GrepApplication
             }
             
             var dynamicOptions = _command.ToDynamicOptions();
-            var grepHelper = dynamicOptions.ToGrepOptionsHelper();
-            var options = grepHelper.ToGrepOptions(); // 一時的な互換性のため
-            var searchResult = await _engine.SearchAsync(options, cancellationToken);
+            var searchResult = await _engine.SearchAsync(dynamicOptions, cancellationToken);
             
-            return await _formatter.FormatOutputAsync(searchResult, options, Console.Out);
+            return await _formatter.FormatOutputAsync(searchResult, dynamicOptions, Console.Out);
         }
         catch (OperationCanceledException)
         {

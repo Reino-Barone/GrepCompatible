@@ -9,11 +9,11 @@ namespace GrepCompatible.Strategies;
 /// </summary>
 public class FixedStringMatchStrategy : IMatchStrategy
 {
-    public bool CanApply(GrepOptions options) => options.FixedStrings;
+    public bool CanApply(DynamicOptions options) => options.GetFlagValue("FixedStrings");
 
-    public IEnumerable<MatchResult> FindMatches(string line, string pattern, GrepOptions options, string fileName, int lineNumber)
+    public IEnumerable<MatchResult> FindMatches(string line, string pattern, DynamicOptions options, string fileName, int lineNumber)
     {
-        var comparison = options.IgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var comparison = options.GetFlagValue("IgnoreCase") ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var currentIndex = 0;
         
         while (currentIndex < line.Length)
@@ -46,12 +46,12 @@ public class RegexMatchStrategy : IMatchStrategy
 {
     private readonly ConcurrentDictionary<string, Regex> _regexCache = new();
 
-    public bool CanApply(GrepOptions options) => options.ExtendedRegexp || (!options.FixedStrings && !options.WholeWord);
+    public bool CanApply(DynamicOptions options) => options.GetFlagValue("ExtendedRegexp") || (!options.GetFlagValue("FixedStrings") && !options.GetFlagValue("WholeWord"));
 
-    public IEnumerable<MatchResult> FindMatches(string line, string pattern, GrepOptions options, string fileName, int lineNumber)
+    public IEnumerable<MatchResult> FindMatches(string line, string pattern, DynamicOptions options, string fileName, int lineNumber)
     {
         var regexOptions = RegexOptions.Compiled;
-        if (options.IgnoreCase)
+        if (options.GetFlagValue("IgnoreCase"))
             regexOptions |= RegexOptions.IgnoreCase;
         
         var cacheKey = $"{pattern}_{regexOptions}";
@@ -90,12 +90,12 @@ public class RegexMatchStrategy : IMatchStrategy
 /// </summary>
 public class WholeWordMatchStrategy : IMatchStrategy
 {
-    public bool CanApply(GrepOptions options) => options.WholeWord;
+    public bool CanApply(DynamicOptions options) => options.GetFlagValue("WholeWord");
 
-    public IEnumerable<MatchResult> FindMatches(string line, string pattern, GrepOptions options, string fileName, int lineNumber)
+    public IEnumerable<MatchResult> FindMatches(string line, string pattern, DynamicOptions options, string fileName, int lineNumber)
     {
         var regexOptions = RegexOptions.Compiled;
-        if (options.IgnoreCase)
+        if (options.GetFlagValue("IgnoreCase"))
             regexOptions |= RegexOptions.IgnoreCase;
         
         var wordPattern = $@"\b{Regex.Escape(pattern)}\b";

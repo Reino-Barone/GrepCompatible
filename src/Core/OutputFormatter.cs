@@ -15,7 +15,7 @@ public interface IOutputFormatter
     /// <param name="options">検索オプション</param>
     /// <param name="writer">出力ライター</param>
     /// <returns>終了コード</returns>
-    Task<int> FormatOutputAsync(SearchResult result, GrepOptions options, TextWriter writer);
+    Task<int> FormatOutputAsync(SearchResult result, DynamicOptions options, TextWriter writer);
 }
 
 /// <summary>
@@ -23,23 +23,23 @@ public interface IOutputFormatter
 /// </summary>
 public class PosixOutputFormatter : IOutputFormatter
 {
-    public async Task<int> FormatOutputAsync(SearchResult result, GrepOptions options, TextWriter writer)
+    public async Task<int> FormatOutputAsync(SearchResult result, DynamicOptions options, TextWriter writer)
     {
         var hasMatches = result.TotalMatches > 0;
         
         // サイレントモードの場合は何も出力しない
-        if (options.SilentMode)
+        if (options.GetFlagValue("SilentMode"))
             return hasMatches ? 0 : 1;
         
         // カウントのみモード
-        if (options.CountOnly)
+        if (options.GetFlagValue("CountOnly"))
         {
             await FormatCountOnlyAsync(result, options, writer);
             return hasMatches ? 0 : 1;
         }
         
         // ファイル名のみモード
-        if (options.FilenameOnly)
+        if (options.GetFlagValue("FilenameOnly"))
         {
             await FormatFilenameOnlyAsync(result, options, writer);
             return hasMatches ? 0 : 1;
@@ -50,11 +50,15 @@ public class PosixOutputFormatter : IOutputFormatter
         return hasMatches ? 0 : 1;
     }
 
-    private async Task FormatCountOnlyAsync(SearchResult result, GrepOptions options, TextWriter writer)
+    private async Task FormatCountOnlyAsync(SearchResult result, DynamicOptions options, TextWriter writer)
     {
+        var files = options.GetStringListArgumentValue("Files") ?? new[] { "-" }.ToList().AsReadOnly();
+        var suppressFilename = options.GetFlagValue("SuppressFilename");
+        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue("FilenameOnly"));
+        
         foreach (var fileResult in result.SuccessfulResults)
         {
-            if (options.ShouldShowFilename)
+            if (shouldShowFilename)
             {
                 await writer.WriteAsync($"{fileResult.FileName}:{fileResult.TotalMatches}");
             }
@@ -66,7 +70,7 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatFilenameOnlyAsync(SearchResult result, GrepOptions options, TextWriter writer)
+    private async Task FormatFilenameOnlyAsync(SearchResult result, DynamicOptions options, TextWriter writer)
     {
         foreach (var fileResult in result.SuccessfulResults.Where(r => r.HasMatches))
         {
@@ -74,7 +78,7 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatNormalOutputAsync(SearchResult result, GrepOptions options, TextWriter writer)
+    private async Task FormatNormalOutputAsync(SearchResult result, DynamicOptions options, TextWriter writer)
     {
         foreach (var fileResult in result.SuccessfulResults.Where(r => r.HasMatches))
         {
@@ -82,10 +86,10 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatFileResultAsync(FileResult fileResult, GrepOptions options, TextWriter writer)
+    private async Task FormatFileResultAsync(FileResult fileResult, DynamicOptions options, TextWriter writer)
     {
-        var contextBefore = options.BeforeContext;
-        var contextAfter = options.AfterContext;
+        var contextBefore = options.GetIntValue("Context") ?? options.GetIntValue("ContextBefore") ?? 0;
+        var contextAfter = options.GetIntValue("Context") ?? options.GetIntValue("ContextAfter") ?? 0;
         
         if (contextBefore == 0 && contextAfter == 0)
         {
@@ -109,18 +113,22 @@ public class PosixOutputFormatter : IOutputFormatter
         }
     }
 
-    private async Task FormatMatchAsync(MatchResult match, GrepOptions options, TextWriter writer)
+    private async Task FormatMatchAsync(MatchResult match, DynamicOptions options, TextWriter writer)
     {
         var output = new StringBuilder();
         
+        var files = options.GetStringListArgumentValue("Files") ?? new[] { "-" }.ToList().AsReadOnly();
+        var suppressFilename = options.GetFlagValue("SuppressFilename");
+        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue("FilenameOnly"));
+        
         // ファイル名
-        if (options.ShouldShowFilename)
+        if (shouldShowFilename)
         {
             output.Append($"{match.FileName}:");
         }
         
         // 行番号
-        if (options.LineNumber)
+        if (options.GetFlagValue("LineNumber"))
         {
             output.Append($"{match.LineNumber}:");
         }
