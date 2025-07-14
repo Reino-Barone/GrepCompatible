@@ -1,3 +1,4 @@
+using GrepCompatible.CommandLine;
 using GrepCompatible.Core;
 using GrepCompatible.Parsers;
 using GrepCompatible.Strategies;
@@ -9,12 +10,12 @@ namespace GrepCompatible.Core;
 /// </summary>
 public class GrepApplication
 {
-    private readonly ICommandLineParser _parser;
+    private readonly Parsers.ICommandLineParser _parser;
     private readonly IGrepEngine _engine;
     private readonly IOutputFormatter _formatter;
 
     public GrepApplication(
-        ICommandLineParser parser,
+        Parsers.ICommandLineParser parser,
         IGrepEngine engine,
         IOutputFormatter formatter)
     {
@@ -37,7 +38,13 @@ public class GrepApplication
             
             if (parseResult.ShowHelp)
             {
-                await Console.Out.WriteLineAsync(PosixCommandLineParser.GetHelpText());
+                var helpText = _parser switch
+                {
+                    CommandLineParserAdapter adapter => adapter.GetHelpText(),
+                    PosixCommandLineParser => PosixCommandLineParser.GetHelpText(),
+                    _ => "Help not available"
+                };
+                await Console.Out.WriteLineAsync(helpText);
                 return 0;
             }
             
@@ -68,6 +75,20 @@ public class GrepApplication
     /// </summary>
     /// <returns>設定済みのアプリケーション</returns>
     public static GrepApplication CreateDefault()
+    {
+        var parser = new CommandLineParserAdapter();
+        var strategyFactory = new MatchStrategyFactory();
+        var engine = new ParallelGrepEngine(strategyFactory);
+        var formatter = new PosixOutputFormatter();
+        
+        return new GrepApplication(parser, engine, formatter);
+    }
+    
+    /// <summary>
+    /// 従来のパーサーを使用してアプリケーションを作成
+    /// </summary>
+    /// <returns>設定済みのアプリケーション</returns>
+    public static GrepApplication CreateWithLegacyParser()
     {
         var parser = new PosixCommandLineParser();
         var strategyFactory = new MatchStrategyFactory();
