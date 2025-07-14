@@ -1,10 +1,10 @@
 namespace GrepCompatible.Constants;
 
 /// <summary>
-/// 引数名の定数定義
+/// 引数名の列挙型定義
 /// </summary>
-public static class ArgumentNames
+public enum ArgumentNames
 {
-    public const string Pattern = "Pattern";
-    public const string Files = "Files";
+    Pattern,
+    Files
 }

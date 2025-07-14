@@ -1,4 +1,5 @@
 using GrepCompatible.CommandLine;
+using GrepCompatible.Constants;
 
 namespace GrepCompatible.Models;
 
@@ -53,11 +54,27 @@ public class DynamicOptions
     }
 
     /// <summary>
+    /// フラグオプションの値を取得（列挙体版）
+    /// </summary>
+    public bool GetFlagValue(OptionNames optionName)
+    {
+        return GetFlagValue(optionName.ToString());
+    }
+
+    /// <summary>
     /// フラグオプションの値を取得
     /// </summary>
     public bool GetFlagValue(string name)
     {
         return GetOption<FlagOption>(name)?.Value ?? false;
+    }
+
+    /// <summary>
+    /// 文字列オプションの値を取得（列挙体版）
+    /// </summary>
+    public string? GetStringValue(OptionNames optionName)
+    {
+        return GetStringValue(optionName.ToString());
     }
 
     /// <summary>
@@ -69,6 +86,14 @@ public class DynamicOptions
     }
 
     /// <summary>
+    /// 整数オプションの値を取得（列挙体版）
+    /// </summary>
+    public int? GetIntValue(OptionNames optionName)
+    {
+        return GetIntValue(optionName.ToString());
+    }
+
+    /// <summary>
     /// 整数オプションの値を取得
     /// </summary>
     public int? GetIntValue(string name)
@@ -77,11 +102,27 @@ public class DynamicOptions
     }
 
     /// <summary>
+    /// 文字列引数の値を取得（列挙体版）
+    /// </summary>
+    public string? GetStringArgumentValue(ArgumentNames argumentName)
+    {
+        return GetStringArgumentValue(argumentName.ToString());
+    }
+
+    /// <summary>
     /// 文字列引数の値を取得
     /// </summary>
     public string? GetStringArgumentValue(string name)
     {
         return GetArgument<StringArgument>(name)?.Value;
+    }
+
+    /// <summary>
+    /// 文字列リスト引数の値を取得（列挙体版）
+    /// </summary>
+    public IReadOnlyList<string>? GetStringListArgumentValue(ArgumentNames argumentName)
+    {
+        return GetStringListArgumentValue(argumentName.ToString());
     }
 
     /// <summary>
