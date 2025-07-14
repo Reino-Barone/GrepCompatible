@@ -1,19 +1,6 @@
 using GrepCompatible.Models;
 
-namespace GrepCompatible.Parsers;
-
-/// <summary>
-/// コマンドライン引数パーサーのインターフェース
-/// </summary>
-public interface ICommandLineParser
-{
-    /// <summary>
-    /// コマンドライン引数をパース
-    /// </summary>
-    /// <param name="args">コマンドライン引数</param>
-    /// <returns>パース結果</returns>
-    ParseResult ParseArguments(string[] args);
-}
+namespace GrepCompatible.CommandLine;
 
 /// <summary>
 /// パース結果を表現するレコード
