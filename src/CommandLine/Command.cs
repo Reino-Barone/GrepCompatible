@@ -4,6 +4,31 @@ using GrepCompatible.Models;
 namespace GrepCompatible.CommandLine;
 
 /// <summary>
+/// コマンドインターフェース
+/// </summary>
+public interface ICommand
+{
+    /// <summary>
+    /// コマンドライン引数を解析
+    /// </summary>
+    /// <param name="args">コマンドライン引数</param>
+    /// <returns>解析結果</returns>
+    CommandParseResult Parse(string[] args);
+    
+    /// <summary>
+    /// ヘルプテキストを取得
+    /// </summary>
+    /// <returns>ヘルプテキスト</returns>
+    string GetHelpText();
+    
+    /// <summary>
+    /// オプションコンテキストを取得
+    /// </summary>
+    /// <returns>オプションコンテキスト</returns>
+    IOptionContext ToOptionContext();
+}
+
+/// <summary>
 /// コマンドの解析結果
 /// </summary>
 public record CommandParseResult(
@@ -20,7 +45,7 @@ public record CommandParseResult(
 /// <summary>
 /// コマンドの抽象基底クラス
 /// </summary>
-public abstract class Command
+public abstract class Command : ICommand
 {
     /// <summary>
     /// コマンド名

@@ -10,11 +10,11 @@ namespace GrepCompatible.Core;
 /// Grepアプリケーションのメインクラス
 /// </summary>
 public class GrepApplication(
-    Command command,
+    ICommand command,
     IGrepEngine engine,
     IOutputFormatter formatter)
 {
-    private readonly Command _command = command ?? throw new ArgumentNullException(nameof(command));
+    private readonly ICommand _command = command ?? throw new ArgumentNullException(nameof(command));
     private readonly IGrepEngine _engine = engine ?? throw new ArgumentNullException(nameof(engine));
     private readonly IOutputFormatter _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
 
