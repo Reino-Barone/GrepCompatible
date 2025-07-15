@@ -9,15 +9,15 @@ namespace GrepCompatible.Test;
 
 public class OutputFormatterTests
 {
-    private readonly Mock<IOptionContext> _mockOptions = new();
     private readonly PosixOutputFormatter _formatter = new();
-    private readonly StringWriter _writer = new();
 
     [Fact]
     public async Task FormatOutputAsync_SilentMode_ReturnsCorrectExitCode()
     {
         // Arrange
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(true);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(true);
         
         var matches = new List<MatchResult>
         {
@@ -28,39 +28,43 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult }, 1, 1, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        Assert.Empty(_writer.ToString());
+        Assert.Empty(writer.ToString());
     }
 
     [Fact]
     public async Task FormatOutputAsync_SilentModeNoMatches_ReturnsCorrectExitCode()
     {
         // Arrange
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(true);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(true);
         
         var fileResult = new FileResult("test.txt", new List<MatchResult>(), 0);
         var searchResult = new SearchResult(new[] { fileResult }, 0, 1, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Empty(_writer.ToString());
+        Assert.Empty(writer.ToString());
     }
 
     [Fact]
     public async Task FormatOutputAsync_CountOnly_SingleFile_ShowsCountOnly()
     {
         // Arrange
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(true);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
-        _mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(true);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
             .Returns(new[] { "test.txt" }.ToList().AsReadOnly());
         
         var matches = new List<MatchResult>
@@ -73,11 +77,11 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult }, 2, 1, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Single(lines);
         Assert.Equal("2", lines[0]);
@@ -87,11 +91,13 @@ public class OutputFormatterTests
     public async Task FormatOutputAsync_CountOnly_MultipleFiles_ShowsFilenameAndCount()
     {
         // Arrange
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(true);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
-        _mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(true);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
             .Returns(new[] { "test1.txt", "test2.txt" }.ToList().AsReadOnly());
         
         var matches1 = new List<MatchResult>
@@ -109,24 +115,28 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult1, fileResult2 }, 3, 2, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
-        Assert.Contains("test1.txt:1", lines);
-        Assert.Contains("test2.txt:2", lines);
+        
+        // 順序に依存しないアサーション
+        Assert.Contains(lines, line => line == "test1.txt:1");
+        Assert.Contains(lines, line => line == "test2.txt:2");
     }
 
     [Fact]
     public async Task FormatOutputAsync_FilenameOnly_ShowsMatchingFilenames()
     {
         // Arrange
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(true);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(true);
         
         var matches = new List<MatchResult>
         {
@@ -139,11 +149,11 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult1, fileResult2 }, 1, 2, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Single(lines);
         Assert.Equal("test.txt", lines[0]);
@@ -153,7 +163,9 @@ public class OutputFormatterTests
     public async Task FormatOutputAsync_NormalOutput_SingleFile_NoLineNumbers()
     {
         // Arrange
-        SetupNormalOutputOptions(singleFile: true, showLineNumbers: false);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        SetupNormalOutputOptions(mockOptions, singleFile: true, showLineNumbers: false);
         
         var matches = new List<MatchResult>
         {
@@ -165,15 +177,17 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult }, 2, 1, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
-        Assert.Contains("hello world", lines);
-        Assert.Contains("hello again", lines);
+        
+        // 順序に依存しないアサーション
+        Assert.Contains(lines, line => line == "hello world");
+        Assert.Contains(lines, line => line == "hello again");
         Assert.DoesNotContain("test.txt:", output);
         Assert.All(lines, line => Assert.DoesNotContain(":", line));
     }
@@ -182,7 +196,9 @@ public class OutputFormatterTests
     public async Task FormatOutputAsync_NormalOutput_SingleFile_WithLineNumbers()
     {
         // Arrange
-        SetupNormalOutputOptions(singleFile: true, showLineNumbers: true);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        SetupNormalOutputOptions(mockOptions, singleFile: true, showLineNumbers: true);
         
         var matches = new List<MatchResult>
         {
@@ -194,15 +210,17 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult }, 2, 1, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
-        Assert.Contains("1:hello world", lines);
-        Assert.Contains("2:hello again", lines);
+        
+        // 順序に依存しないアサーション
+        Assert.Contains(lines, line => line == "1:hello world");
+        Assert.Contains(lines, line => line == "2:hello again");
         Assert.DoesNotContain("test.txt:", output);
     }
 
@@ -210,7 +228,9 @@ public class OutputFormatterTests
     public async Task FormatOutputAsync_NormalOutput_MultipleFiles_WithFilenameAndLineNumbers()
     {
         // Arrange
-        SetupNormalOutputOptions(singleFile: false, showLineNumbers: true);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        SetupNormalOutputOptions(mockOptions, singleFile: false, showLineNumbers: true);
         
         var matches1 = new List<MatchResult>
         {
@@ -226,22 +246,26 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult1, fileResult2 }, 2, 2, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
-        Assert.Contains("test1.txt:1:hello world", lines);
-        Assert.Contains("test2.txt:3:hello again", lines);
+        
+        // 順序に依存しないアサーション
+        Assert.Contains(lines, line => line == "test1.txt:1:hello world");
+        Assert.Contains(lines, line => line == "test2.txt:3:hello again");
     }
 
     [Fact]
     public async Task FormatOutputAsync_NormalOutput_MultipleFiles_WithFilenameOnly()
     {
         // Arrange
-        SetupNormalOutputOptions(singleFile: false, showLineNumbers: false);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        SetupNormalOutputOptions(mockOptions, singleFile: false, showLineNumbers: false);
         
         var matches1 = new List<MatchResult>
         {
@@ -257,30 +281,34 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult1, fileResult2 }, 2, 2, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Equal(2, lines.Length);
-        Assert.Contains("test1.txt:hello world", lines);
-        Assert.Contains("test2.txt:hello again", lines);
+        
+        // 順序に依存しないアサーション
+        Assert.Contains(lines, line => line == "test1.txt:hello world");
+        Assert.Contains(lines, line => line == "test2.txt:hello again");
     }
 
     [Fact]
     public async Task FormatOutputAsync_SuppressFilename_OverridesFilenameDisplay()
     {
         // Arrange
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(true);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.LineNumber)).Returns(true);
-        _mockOptions.Setup(o => o.GetIntValue(OptionNames.Context)).Returns((int?)null);
-        _mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextBefore)).Returns((int?)null);
-        _mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextAfter)).Returns((int?)null);
-        _mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(true);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.LineNumber)).Returns(true);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.Context)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextBefore)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextAfter)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
             .Returns(new[] { "test1.txt", "test2.txt" }.ToList().AsReadOnly());
         
         var matches = new List<MatchResult>
@@ -292,11 +320,11 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult }, 1, 1, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Single(lines);
         Assert.Equal("1:hello world", lines[0]);
@@ -307,24 +335,28 @@ public class OutputFormatterTests
     public async Task FormatOutputAsync_NoMatches_ReturnsExitCode1()
     {
         // Arrange
-        SetupNormalOutputOptions(singleFile: true, showLineNumbers: false);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        SetupNormalOutputOptions(mockOptions, singleFile: true, showLineNumbers: false);
         
         var fileResult = new FileResult("test.txt", new List<MatchResult>(), 0);
         var searchResult = new SearchResult(new[] { fileResult }, 0, 1, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(1, exitCode);
-        Assert.Empty(_writer.ToString());
+        Assert.Empty(writer.ToString());
     }
 
     [Fact]
     public async Task FormatOutputAsync_SkipsFilesWithoutMatches()
     {
         // Arrange
-        SetupNormalOutputOptions(singleFile: false, showLineNumbers: false);
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        SetupNormalOutputOptions(mockOptions, singleFile: false, showLineNumbers: false);
         
         var matchesFile1 = new List<MatchResult>
         {
@@ -337,36 +369,36 @@ public class OutputFormatterTests
         var searchResult = new SearchResult(new[] { fileResult1, fileResult2 }, 1, 2, TimeSpan.FromMilliseconds(100));
 
         // Act
-        var exitCode = await _formatter.FormatOutputAsync(searchResult, _mockOptions.Object, _writer);
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
 
         // Assert
         Assert.Equal(0, exitCode);
-        var output = _writer.ToString();
+        var output = writer.ToString();
         var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
         Assert.Single(lines);
         Assert.Equal("test1.txt:hello world", lines[0]);
         Assert.DoesNotContain("test2.txt", output);
     }
 
-    private void SetupNormalOutputOptions(bool singleFile, bool showLineNumbers)
+    private static void SetupNormalOutputOptions(Mock<IOptionContext> mockOptions, bool singleFile, bool showLineNumbers)
     {
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.LineNumber)).Returns(showLineNumbers);
-        _mockOptions.Setup(o => o.GetIntValue(OptionNames.Context)).Returns((int?)null);
-        _mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextBefore)).Returns((int?)null);
-        _mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextAfter)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.LineNumber)).Returns(showLineNumbers);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.Context)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextBefore)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextAfter)).Returns((int?)null);
         
         if (singleFile)
         {
-            _mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
+            mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
                 .Returns(new[] { "test.txt" }.ToList().AsReadOnly());
         }
         else
         {
-            _mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
+            mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
                 .Returns(new[] { "test1.txt", "test2.txt" }.ToList().AsReadOnly());
         }
     }
