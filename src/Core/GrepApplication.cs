@@ -10,12 +10,12 @@ namespace GrepCompatible.Core;
 /// </summary>
 public class GrepApplication
 {
-    private readonly GrepCommand _command;
+    private readonly Command _command;
     private readonly IGrepEngine _engine;
     private readonly IOutputFormatter _formatter;
 
     public GrepApplication(
-        GrepCommand command,
+        Command command,
         IGrepEngine engine,
         IOutputFormatter formatter)
     {
@@ -53,11 +53,11 @@ public class GrepApplication
                 await Console.Error.WriteLineAsync($"Error: {parseResult.ErrorMessage}");
                 return 2;
             }
-            
-            var dynamicOptions = _command.ToDynamicOptions();
-            var searchResult = await _engine.SearchAsync(dynamicOptions, cancellationToken);
-            
-            return await _formatter.FormatOutputAsync(searchResult, dynamicOptions, Console.Out);
+
+            var optionContext = _command.ToOptionContext();
+            var searchResult = await _engine.SearchAsync(optionContext, cancellationToken);
+
+            return await _formatter.FormatOutputAsync(searchResult, optionContext, Console.Out);
         }
         catch (OperationCanceledException)
         {

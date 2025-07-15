@@ -97,7 +97,7 @@ public class GrepCommand : Command
     /// <summary>
     /// 現在の設定からDynamicOptionsを構築
     /// </summary>
-    public DynamicOptions ToDynamicOptions()
+    public override IOptionContext ToOptionContext()
     {
         var dynamicOptions = new DynamicOptions();
         
