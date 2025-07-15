@@ -2,7 +2,9 @@
 
 .NET 9.0で書かれた高性能なPOSIX準拠のgrep実装です。
 
-> [日本語版のREADME](README.ja.md) | [English README](README.md)
+📖 **Languages**: [English](README.md) | [日本語](README.ja.md)
+
+---
 
 ## 機能
 

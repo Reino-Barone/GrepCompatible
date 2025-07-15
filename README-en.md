@@ -2,7 +2,9 @@
 
 A high-performance, POSIX-compatible grep implementation written in C# for .NET 9.0.
 
-> [日本語版のREADME](README.ja.md) | [English README](README.md)
+📖 **Languages**: [English](README.md) | [日本語](README.ja.md)
+
+---
 
 ## Features
 
