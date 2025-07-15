@@ -28,6 +28,7 @@ public interface IGrepEngine
 public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEngine
 {
     private readonly IMatchStrategyFactory _strategyFactory = strategyFactory ?? throw new ArgumentNullException(nameof(strategyFactory));
+    private static readonly string[] sourceArray = new[] { "-" };
 
     public async Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default)
     {
@@ -74,8 +75,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
     private async Task<IEnumerable<string>> ExpandFilesAsync(IOptionContext options, CancellationToken cancellationToken)
     {
         var files = new List<string>();
-        var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ?? 
-            new[] { "-" }.ToList().AsReadOnly();
+        var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ??
+            sourceArray.ToList().AsReadOnly();
+        var isRecursive = options.GetFlagValue(OptionNames.RecursiveSearch);
         
         foreach (var filePattern in filesArg)
         {
@@ -85,7 +87,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 continue;
             }
             
-            if (options.GetFlagValue(OptionNames.RecursiveSearch))
+            if (isRecursive)
             {
                 var expandedFiles = await ExpandRecursiveAsync(filePattern, options, cancellationToken);
                 files.AddRange(expandedFiles);
@@ -158,19 +160,17 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         
         // 除外パターンのチェック
         var excludePattern = options.GetStringValue(OptionNames.ExcludePattern);
-        if (excludePattern != null)
+        if (!string.IsNullOrEmpty(excludePattern))
         {
-            var excludeRegex = new Regex(excludePattern, RegexOptions.IgnoreCase);
-            if (excludeRegex.IsMatch(fileName))
+            if (Regex.IsMatch(fileName, excludePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
                 return false;
         }
         
         // 包含パターンのチェック
         var includePattern = options.GetStringValue(OptionNames.IncludePattern);
-        if (includePattern != null)
+        if (!string.IsNullOrEmpty(includePattern))
         {
-            var includeRegex = new Regex(includePattern, RegexOptions.IgnoreCase);
-            if (!includeRegex.IsMatch(fileName))
+            if (!Regex.IsMatch(fileName, includePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
                 return false;
         }
         
@@ -179,6 +179,11 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
 
     private async Task<FileResult> ProcessFileAsync(string filePath, IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
     {
+        // オプション値を一度だけ取得してキャッシュ
+        var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
+        var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
+        var maxCount = options.GetIntValue(OptionNames.MaxCount);
+        
         try
         {
             var matches = new List<MatchResult>();
@@ -188,12 +193,8 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
             // 標準入力の処理
             if (filePath == "-")
             {
-                return await ProcessStandardInputAsync(strategy, options, cancellationToken);
+                return await ProcessStandardInputAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken);
             }
-            
-            var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
-            var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
-            var maxCount = options.GetIntValue(OptionNames.MaxCount);
             
             // ファイルの処理（大きなファイルでもメモリ効率的）
             using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
@@ -240,16 +241,12 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         }
     }
 
-    private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
     {
         var matches = new List<MatchResult>();
         var lineNumber = 0;
         var matchCount = 0;
         const string fileName = "(standard input)";
-        
-        var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
-        var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
-        var maxCount = options.GetIntValue(OptionNames.MaxCount);
         
         try
         {
