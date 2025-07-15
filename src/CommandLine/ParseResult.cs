@@ -6,7 +6,7 @@ namespace GrepCompatible.CommandLine;
 /// パース結果を表現するレコード
 /// </summary>
 public record ParseResult(
-    DynamicOptions? Options,
+    IOptionContext? Options,
     bool IsSuccess,
     string? ErrorMessage = null,
     bool ShowHelp = false
@@ -15,7 +15,7 @@ public record ParseResult(
     /// <summary>
     /// 成功したパース結果を作成
     /// </summary>
-    public static ParseResult Success(DynamicOptions options) => new(options, true);
+    public static ParseResult Success(IOptionContext options) => new(options, true);
     
     /// <summary>
     /// エラーのパース結果を作成
