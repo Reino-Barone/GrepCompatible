@@ -14,29 +14,35 @@ public class FixedStringMatchStrategy : IMatchStrategy
 
     public IEnumerable<MatchResult> FindMatches(string line, string pattern, IOptionContext options, string fileName, int lineNumber)
     {
+        // パターンが空の場合は早期リターン
+        if (string.IsNullOrEmpty(pattern))
+            yield break;
+            
+        // オプション値を一度だけ取得してキャッシュ
         var comparison = options.GetFlagValue(OptionNames.IgnoreCase) ? 
             StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         var currentIndex = 0;
+        var patternLength = pattern.Length;
+        var lineLength = line.Length;
         
-        while (currentIndex < line.Length)
+        while (currentIndex < lineLength)
         {
             var foundIndex = line.IndexOf(pattern, currentIndex, comparison);
             if (foundIndex == -1)
                 break;
                 
-            var actualIndex = foundIndex;
-            var matchedText = line.AsMemory(actualIndex, pattern.Length);
+            var matchedText = line.AsMemory(foundIndex, patternLength);
             
             yield return new MatchResult(
                 fileName,
                 lineNumber,
                 line,
                 matchedText,
-                actualIndex,
-                actualIndex + pattern.Length
+                foundIndex,
+                foundIndex + patternLength
             );
             
-            currentIndex = actualIndex + 1;
+            currentIndex = foundIndex + 1;
         }
     }
 }
@@ -46,7 +52,7 @@ public class FixedStringMatchStrategy : IMatchStrategy
 /// </summary>
 public class RegexMatchStrategy : IMatchStrategy
 {
-    private readonly ConcurrentDictionary<string, Regex> _regexCache = new();
+    private readonly ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex> _regexCache = new();
 
     public bool CanApply(IOptionContext options) => 
         options.GetFlagValue(OptionNames.ExtendedRegexp) || 
@@ -55,21 +61,25 @@ public class RegexMatchStrategy : IMatchStrategy
 
     public IEnumerable<MatchResult> FindMatches(string line, string pattern, IOptionContext options, string fileName, int lineNumber)
     {
+        // パターンが空の場合は早期リターン
+        if (string.IsNullOrEmpty(pattern))
+            yield break;
+            
         var regexOptions = RegexOptions.Compiled;
         if (options.GetFlagValue(OptionNames.IgnoreCase))
             regexOptions |= RegexOptions.IgnoreCase;
         
-        var cacheKey = $"{pattern}_{regexOptions}";
-        var regex = _regexCache.GetOrAdd(cacheKey, _ =>
+        var cacheKey = (pattern, regexOptions);
+        var regex = _regexCache.GetOrAdd(cacheKey, key =>
         {
             try
             {
-                return new Regex(pattern, regexOptions, TimeSpan.FromSeconds(1));
+                return new Regex(key.Pattern, key.Options, TimeSpan.FromSeconds(1));
             }
             catch (RegexParseException)
             {
                 // パターンが正規表現として無効な場合は、固定文字列として扱う
-                return new Regex(Regex.Escape(pattern), regexOptions, TimeSpan.FromSeconds(1));
+                return new Regex(Regex.Escape(key.Pattern), key.Options, TimeSpan.FromSeconds(1));
             }
         });
 
@@ -95,16 +105,25 @@ public class RegexMatchStrategy : IMatchStrategy
 /// </summary>
 public class WholeWordMatchStrategy : IMatchStrategy
 {
+    private readonly ConcurrentDictionary<(string Pattern, RegexOptions Options), Regex> _regexCache = new();
+
     public bool CanApply(IOptionContext options) => options.GetFlagValue(OptionNames.WholeWord);
 
     public IEnumerable<MatchResult> FindMatches(string line, string pattern, IOptionContext options, string fileName, int lineNumber)
     {
+        // パターンが空の場合は早期リターン
+        if (string.IsNullOrEmpty(pattern))
+            yield break;
+            
         var regexOptions = RegexOptions.Compiled;
         if (options.GetFlagValue(OptionNames.IgnoreCase))
             regexOptions |= RegexOptions.IgnoreCase;
         
         var wordPattern = $@"\b{Regex.Escape(pattern)}\b";
-        var regex = new Regex(wordPattern, regexOptions, TimeSpan.FromSeconds(1));
+        var cacheKey = (wordPattern, regexOptions);
+        
+        var regex = _regexCache.GetOrAdd(cacheKey, key =>
+            new Regex(key.Pattern, key.Options, TimeSpan.FromSeconds(1)));
         
         var matches = regex.Matches(line);
         
