@@ -2,7 +2,7 @@
 
 .NET 9.0で書かれた高性能なPOSIX準拠のgrep実装です。
 
-📖 **Languages**: [English](README.md) | [日本語](README.ja.md)
+📖 **Languages**: [English](README-en.md) | [日本語](README.md)
 
 ---
 
@@ -225,7 +225,7 @@ GrepCompatibleは以下の要素で高性能を実現：
 
 ## ライセンス
 
-このプロジェクトはMITライセンスの下でライセンスされています - 詳細は[LICENSE](LICENSE)ファイルを参照してください。
+このプロジェクトはMITライセンスの下でライセンスされています - 詳細は[LICENSE](LICENSE.md)ファイルを参照してください。
 
 ## 謝辞
 
