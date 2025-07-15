@@ -70,11 +70,7 @@ public class GrepEngineDebugTests : IDisposable
         Assert.NotNull(result);
         
         // デバッグ情報を出力
-        Console.WriteLine($"Total FileResults: {result.FileResults.Count}");
-        foreach (var fr in result.FileResults)
-        {
-            Console.WriteLine($"File: {fr.FileName}, Matches: {fr.TotalMatches}, HasError: {fr.HasError}, ErrorMessage: {fr.ErrorMessage}");
-        }
+        // Debug output removed to keep test logs clean.
         
         if (result.FileResults.Count == 0)
         {
