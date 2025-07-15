@@ -1,4 +1,5 @@
 using GrepCompatible.Constants;
+using GrepCompatible.Models;
 
 namespace GrepCompatible.CommandLine;
 
@@ -25,32 +26,32 @@ public abstract class Command
     /// コマンド名
     /// </summary>
     public string Name { get; }
-    
+
     /// <summary>
     /// コマンドの説明
     /// </summary>
     public string Description { get; }
-    
+
     /// <summary>
     /// オプションのリスト
     /// </summary>
     public IReadOnlyList<Option> Options { get; }
-    
+
     /// <summary>
     /// 引数のリスト
     /// </summary>
     public IReadOnlyList<Argument> Arguments { get; }
-    
+
     /// <summary>
     /// オプション名からオプションへのマッピング（文字列キー）
     /// </summary>
     private readonly Dictionary<string, Option> _optionMap = [];
-    
+
     /// <summary>
     /// オプション名からオプションへのマッピング（列挙体キー）
     /// </summary>
     private readonly Dictionary<OptionNames, Option> _optionNameMap = [];
-    
+
     /// <summary>
     /// 引数のインデックス
     /// </summary>
@@ -62,7 +63,7 @@ public abstract class Command
         Description = description;
         Options = options.ToArray();
         Arguments = arguments.ToArray();
-        
+
         // オプションマッピングを構築
         foreach (var option in Options)
         {
@@ -70,12 +71,12 @@ public abstract class Command
                 _optionMap[option.ShortName] = option;
             if (option.LongName != null)
                 _optionMap[option.LongName] = option;
-            
+
             // 列挙体キーでもマッピング
             _optionNameMap[option.Name] = option;
         }
     }
-    
+
     /// <summary>
     /// コマンドライン引数を解析
     /// </summary>
@@ -84,17 +85,17 @@ public abstract class Command
     public CommandParseResult Parse(string[] args)
     {
         Reset();
-        
+
         for (int i = 0; i < args.Length; i++)
         {
             var arg = args[i];
-            
+
             if (arg.StartsWith('-'))
             {
                 var result = ParseOption(arg, args, ref i);
                 if (!result.IsSuccess)
                     return result;
-                
+
                 if (result.ShowHelp)
                     return result;
             }
@@ -105,15 +106,15 @@ public abstract class Command
                     return result;
             }
         }
-        
+
         // 必須オプションと引数のチェック
         var validationResult = ValidateRequiredItems();
         if (!validationResult.IsSuccess)
             return validationResult;
-        
+
         return CommandParseResult.Success();
     }
-    
+
     /// <summary>
     /// オプションを解析
     /// </summary>
@@ -122,11 +123,11 @@ public abstract class Command
         // ヘルプオプションの特別処理
         if (arg is "-?" or "--help")
             return CommandParseResult.Help();
-        
+
         // オプション名と値を分離
         string optionName;
         string? optionValue = null;
-        
+
         if (arg.Contains('='))
         {
             var parts = arg.Split('=', 2);
@@ -146,16 +147,16 @@ public abstract class Command
                 }
             }
         }
-        
+
         if (!_optionMap.TryGetValue(optionName, out var targetOption))
             return CommandParseResult.Error($"Unknown option: {optionName}");
-        
+
         if (!targetOption.TryParse(optionValue))
             return CommandParseResult.Error($"Invalid value for option {optionName}: {optionValue}");
-        
+
         return CommandParseResult.Success();
     }
-    
+
     /// <summary>
     /// 引数を解析
     /// </summary>
@@ -171,21 +172,21 @@ public abstract class Command
                     return CommandParseResult.Error($"Invalid value for argument {lastArg.Name}: {value}");
                 return CommandParseResult.Success();
             }
-            
+
             return CommandParseResult.Error($"Too many arguments provided");
         }
-        
+
         var argument = Arguments[_argumentIndex];
         if (!argument.TryParse(value))
             return CommandParseResult.Error($"Invalid value for argument {argument.Name}: {value}");
-        
+
         // リスト引数でない場合は次の引数に進む
         if (argument is not StringListArgument)
             _argumentIndex++;
-        
+
         return CommandParseResult.Success();
     }
-    
+
     /// <summary>
     /// 必須項目を検証
     /// </summary>
@@ -196,16 +197,16 @@ public abstract class Command
         {
             return CommandParseResult.Error($"Required option is missing: {option.Name}");
         }
-        
+
         // 必須引数のチェック
         foreach (var argument in Arguments.Where(a => a.IsRequired && !a.IsSet))
         {
             return CommandParseResult.Error($"Required argument is missing: {argument.Name}");
         }
-        
+
         return CommandParseResult.Success();
     }
-    
+
     /// <summary>
     /// オプションと引数をリセット
     /// </summary>
@@ -213,20 +214,20 @@ public abstract class Command
     {
         foreach (var option in Options)
             option.Reset();
-        
+
         foreach (var argument in Arguments)
             argument.Reset();
-        
+
         _argumentIndex = 0;
     }
-    
+
     /// <summary>
     /// 使用方法文字列を生成
     /// </summary>
     public virtual string GetUsageString()
     {
         var usage = new List<string> { Name };
-        
+
         // オプションを追加
         foreach (var option in Options)
         {
@@ -235,16 +236,16 @@ public abstract class Command
                 optionString = $"[{optionString}]";
             usage.Add(optionString);
         }
-        
+
         // 引数を追加
         foreach (var argument in Arguments)
         {
             usage.Add(argument.GetUsageString());
         }
-        
+
         return string.Join(" ", usage);
     }
-    
+
     /// <summary>
     /// ヘルプテキストを生成
     /// </summary>
@@ -256,7 +257,7 @@ public abstract class Command
             "",
             Description
         };
-        
+
         if (Options.Any())
         {
             help.Add("");
@@ -266,7 +267,7 @@ public abstract class Command
                 help.Add($"  {option.GetUsageString(),-30} {option.Description}");
             }
         }
-        
+
         if (Arguments.Any())
         {
             help.Add("");
@@ -276,10 +277,10 @@ public abstract class Command
                 help.Add($"  {argument.GetUsageString(),-30} {argument.Description}");
             }
         }
-        
+
         return string.Join(Environment.NewLine, help);
     }
-    
+
     /// <summary>
     /// オプション名（列挙体）でオプションを取得
     /// </summary>
@@ -290,7 +291,7 @@ public abstract class Command
     {
         return _optionNameMap.TryGetValue(name, out var option) ? option as T : null;
     }
-    
+
     /// <summary>
     /// 引数名（列挙体）で引数を取得
     /// </summary>
@@ -301,4 +302,6 @@ public abstract class Command
     {
         return Arguments.OfType<T>().FirstOrDefault(a => a.Name == name);
     }
+
+    public abstract IOptionContext ToOptionContext();
 }
