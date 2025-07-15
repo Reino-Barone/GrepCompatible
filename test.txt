@@ -1,6 +1,0 @@
-This is a test file.
-It contains some text.
-Here is a line with the word "test" in it.
-Another line for testing purposes.
-The word Test appears here too.
-Final line without the t-word.

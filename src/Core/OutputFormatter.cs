@@ -1,8 +1,23 @@
 using GrepCompatible.Constants;
 using GrepCompatible.Models;
+using System.Buffers;
 using System.Text;
 
 namespace GrepCompatible.Core;
+
+/// <summary>
+/// フォーマットオプションをキャッシュするためのレコード
+/// </summary>
+/// <param name="ShouldShowFilename">ファイル名を表示するかどうか</param>
+/// <param name="ShowLineNumber">行番号を表示するかどうか</param>
+/// <param name="ContextBefore">前のコンテキスト行数</param>
+/// <param name="ContextAfter">後のコンテキスト行数</param>
+public readonly record struct FormatOptions(
+    bool ShouldShowFilename,
+    bool ShowLineNumber,
+    int ContextBefore,
+    int ContextAfter
+);
 
 /// <summary>
 /// 出力フォーマッターのインターフェース
@@ -53,6 +68,7 @@ public class PosixOutputFormatter : IOutputFormatter
 
     private async Task FormatCountOnlyAsync(SearchResult result, IOptionContext options, TextWriter writer)
     {
+        // オプション値をキャッシュ
         var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
         var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
         var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
@@ -61,82 +77,141 @@ public class PosixOutputFormatter : IOutputFormatter
         {
             if (shouldShowFilename)
             {
-                await writer.WriteAsync($"{fileResult.FileName}:{fileResult.TotalMatches}");
+                // 2個の文字列結合: 直接結合の方が高速
+                await writer.WriteLineAsync($"{fileResult.FileName}:{fileResult.TotalMatches}");
             }
             else
             {
-                await writer.WriteAsync(fileResult.TotalMatches.ToString());
+                // 単一の値: 直接出力
+                await writer.WriteLineAsync(fileResult.TotalMatches.ToString());
             }
-            await writer.WriteLineAsync();
         }
     }
 
     private async Task FormatFilenameOnlyAsync(SearchResult result, IOptionContext options, TextWriter writer)
     {
-        foreach (var fileResult in result.SuccessfulResults.Where(r => r.HasMatches))
+        // LINQ最適化: 一度の反復で処理
+        foreach (var fileResult in result.SuccessfulResults)
         {
-            await writer.WriteLineAsync(fileResult.FileName);
+            if (fileResult.HasMatches)
+            {
+                await writer.WriteLineAsync(fileResult.FileName);
+            }
         }
     }
 
     private async Task FormatNormalOutputAsync(SearchResult result, IOptionContext options, TextWriter writer)
     {
-        foreach (var fileResult in result.SuccessfulResults.Where(r => r.HasMatches))
-        {
-            await FormatFileResultAsync(fileResult, options, writer);
-        }
-    }
-
-    private async Task FormatFileResultAsync(FileResult fileResult, IOptionContext options, TextWriter writer)
-    {
+        // オプション値を一度だけ取得してキャッシュ
+        var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
+        var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
+        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
+        var showLineNumber = options.GetFlagValue(OptionNames.LineNumber);
         var contextBefore = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextBefore) ?? 0;
         var contextAfter = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextAfter) ?? 0;
         
-        if (contextBefore == 0 && contextAfter == 0)
+        // オプション値をFormatOptionsとして渡す
+        var formatOptions = new FormatOptions(shouldShowFilename, showLineNumber, contextBefore, contextAfter);
+        
+        // LINQ最適化: 一度の反復で処理
+        foreach (var fileResult in result.SuccessfulResults)
         {
-            // コンテキストなしの場合
+            if (fileResult.HasMatches)
+            {
+                await FormatFileResultAsync(fileResult, formatOptions, writer);
+            }
+        }
+    }
+
+    private async Task FormatFileResultAsync(FileResult fileResult, FormatOptions formatOptions, TextWriter writer)
+    {
+        if (formatOptions.ContextBefore == 0 && formatOptions.ContextAfter == 0)
+        {
+            // コンテキストなしの場合: 直接処理
             foreach (var match in fileResult.Matches)
             {
-                await FormatMatchAsync(match, options, writer);
+                await FormatMatchAsync(match, formatOptions, writer);
             }
         }
         else
         {
-            // コンテキストありの場合（簡略化実装）
-            var groupedMatches = fileResult.Matches.GroupBy(m => m.LineNumber);
-            foreach (var group in groupedMatches)
+            // コンテキストありの場合: ArrayPoolを使用してメモリ効率を向上
+            var currentLineNumber = -1;
+            var rentedArray = ArrayPool<MatchResult>.Shared.Rent(32); // 初期サイズ32
+            var currentGroupCount = 0;
+            
+            try
             {
-                foreach (var match in group)
+                foreach (var match in fileResult.Matches)
                 {
-                    await FormatMatchAsync(match, options, writer);
+                    if (match.LineNumber != currentLineNumber)
+                    {
+                        // 前のグループを処理
+                        if (currentGroupCount > 0)
+                        {
+                            for (int i = 0; i < currentGroupCount; i++)
+                            {
+                                await FormatMatchAsync(rentedArray[i], formatOptions, writer);
+                            }
+                            currentGroupCount = 0;
+                        }
+                        
+                        currentLineNumber = match.LineNumber;
+                    }
+                    
+                    // 配列サイズが不足する場合は拡張
+                    if (currentGroupCount >= rentedArray.Length)
+                    {
+                        var newArray = ArrayPool<MatchResult>.Shared.Rent(rentedArray.Length * 2);
+                        Array.Copy(rentedArray, newArray, currentGroupCount);
+                        ArrayPool<MatchResult>.Shared.Return(rentedArray);
+                        rentedArray = newArray;
+                    }
+                    
+                    rentedArray[currentGroupCount++] = match;
                 }
+                
+                // 最後のグループを処理
+                if (currentGroupCount > 0)
+                {
+                    for (int i = 0; i < currentGroupCount; i++)
+                    {
+                        await FormatMatchAsync(rentedArray[i], formatOptions, writer);
+                    }
+                }
+            }
+            finally
+            {
+                ArrayPool<MatchResult>.Shared.Return(rentedArray);
             }
         }
     }
 
-    private async Task FormatMatchAsync(MatchResult match, IOptionContext options, TextWriter writer)
+    private async Task FormatMatchAsync(MatchResult match, FormatOptions formatOptions, TextWriter writer)
     {
-        var output = new StringBuilder();
-        
-        var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
-        var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
-        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
-        
-        // ファイル名
-        if (shouldShowFilename)
+        // 小さな文字列結合の場合は直接結合の方が高速
+        if (!formatOptions.ShouldShowFilename && !formatOptions.ShowLineNumber)
         {
-            output.Append($"{match.FileName}:");
+            // 行のみの場合: 直接出力
+            await writer.WriteLineAsync(match.Line);
+            return;
         }
         
-        // 行番号
-        if (options.GetFlagValue(OptionNames.LineNumber))
+        // 2-3個の文字列結合の場合は直接結合を使用
+        if (formatOptions.ShouldShowFilename && formatOptions.ShowLineNumber)
         {
-            output.Append($"{match.LineNumber}:");
+            // ファイル名 + 行番号 + 行
+            await writer.WriteLineAsync($"{match.FileName}:{match.LineNumber}:{match.Line}");
         }
-        
-        // マッチした行
-        output.Append(match.Line);
-        
-        await writer.WriteLineAsync(output.ToString());
+        else if (formatOptions.ShouldShowFilename)
+        {
+            // ファイル名 + 行
+            await writer.WriteLineAsync($"{match.FileName}:{match.Line}");
+        }
+        else // formatOptions.ShowLineNumber
+        {
+            // 行番号 + 行
+            await writer.WriteLineAsync($"{match.LineNumber}:{match.Line}");
+        }
     }
 }

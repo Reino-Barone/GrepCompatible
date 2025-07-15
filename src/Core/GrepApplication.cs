@@ -1,3 +1,4 @@
+using GrepCompatible.Abstractions;
 using GrepCompatible.CommandLine;
 using GrepCompatible.Core;
 using GrepCompatible.Models;
@@ -8,21 +9,14 @@ namespace GrepCompatible.Core;
 /// <summary>
 /// Grepアプリケーションのメインクラス
 /// </summary>
-public class GrepApplication
+public class GrepApplication(
+    ICommand command,
+    IGrepEngine engine,
+    IOutputFormatter formatter)
 {
-    private readonly Command _command;
-    private readonly IGrepEngine _engine;
-    private readonly IOutputFormatter _formatter;
-
-    public GrepApplication(
-        Command command,
-        IGrepEngine engine,
-        IOutputFormatter formatter)
-    {
-        _command = command ?? throw new ArgumentNullException(nameof(command));
-        _engine = engine ?? throw new ArgumentNullException(nameof(engine));
-        _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
-    }
+    private readonly ICommand _command = command ?? throw new ArgumentNullException(nameof(command));
+    private readonly IGrepEngine _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+    private readonly IOutputFormatter _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
 
     /// <summary>
     /// アプリケーションを実行
@@ -78,7 +72,9 @@ public class GrepApplication
     {
         var command = new GrepCommand();
         var strategyFactory = new MatchStrategyFactory();
-        var engine = new ParallelGrepEngine(strategyFactory);
+        var fileSystem = new FileSystem();
+        var pathHelper = new PathHelper();
+        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, pathHelper);
         var formatter = new PosixOutputFormatter();
         
         return new GrepApplication(command, engine, formatter);

@@ -1,6 +1,8 @@
+using GrepCompatible.Abstractions;
 using GrepCompatible.Constants;
 using GrepCompatible.Models;
 using GrepCompatible.Strategies;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
@@ -25,9 +27,13 @@ public interface IGrepEngine
 /// <summary>
 /// 並列処理対応のGrep実装
 /// </summary>
-public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEngine
+public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSystem fileSystem, IPath pathHelper) : IGrepEngine
 {
     private readonly IMatchStrategyFactory _strategyFactory = strategyFactory ?? throw new ArgumentNullException(nameof(strategyFactory));
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly IPath _pathHelper = pathHelper ?? throw new ArgumentNullException(nameof(pathHelper));
+    private static readonly string[] sourceArray = ["-"];
+    private static readonly ArrayPool<MatchResult> _matchPool = ArrayPool<MatchResult>.Shared;
 
     public async Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default)
     {
@@ -74,8 +80,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
     private async Task<IEnumerable<string>> ExpandFilesAsync(IOptionContext options, CancellationToken cancellationToken)
     {
         var files = new List<string>();
-        var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ?? 
-            new[] { "-" }.ToList().AsReadOnly();
+        var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ??
+            sourceArray.ToList().AsReadOnly();
+        var isRecursive = options.GetFlagValue(OptionNames.RecursiveSearch);
         
         foreach (var filePattern in filesArg)
         {
@@ -85,12 +92,12 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 continue;
             }
             
-            if (options.GetFlagValue(OptionNames.RecursiveSearch))
+            if (isRecursive)
             {
                 var expandedFiles = await ExpandRecursiveAsync(filePattern, options, cancellationToken);
                 files.AddRange(expandedFiles);
             }
-            else if (File.Exists(filePattern))
+            else if (_fileSystem.FileExists(filePattern))
             {
                 files.Add(filePattern);
             }
@@ -109,10 +116,10 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
     {
         var files = new List<string>();
         
-        if (Directory.Exists(path))
+        if (_fileSystem.DirectoryExists(path))
         {
             var searchOption = SearchOption.AllDirectories;
-            var allFiles = Directory.EnumerateFiles(path, "*", searchOption);
+            var allFiles = _fileSystem.EnumerateFiles(path, "*", searchOption);
             
             foreach (var file in allFiles)
             {
@@ -124,7 +131,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 }
             }
         }
-        else if (File.Exists(path))
+        else if (_fileSystem.FileExists(path))
         {
             files.Add(path);
         }
@@ -132,16 +139,16 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         return Task.FromResult<IEnumerable<string>>(files);
     }
 
-    private static IEnumerable<string> ExpandGlobPattern(string pattern)
+    private IEnumerable<string> ExpandGlobPattern(string pattern)
     {
         try
         {
-            var directory = Path.GetDirectoryName(pattern) ?? ".";
-            var fileName = Path.GetFileName(pattern);
+            var directory = _pathHelper.GetDirectoryName(pattern) ?? ".";
+            var fileName = _pathHelper.GetFileName(pattern);
             
-            if (Directory.Exists(directory))
+            if (_fileSystem.DirectoryExists(directory))
             {
-                return Directory.EnumerateFiles(directory, fileName, SearchOption.TopDirectoryOnly);
+                return _fileSystem.EnumerateFiles(directory, fileName, SearchOption.TopDirectoryOnly);
             }
         }
         catch (Exception)
@@ -152,26 +159,67 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         return [pattern];
     }
 
-    private static bool ShouldIncludeFile(string filePath, IOptionContext options)
+    /// <summary>
+    /// ファイルサイズに応じた最適なバッファサイズを計算
+    /// </summary>
+    /// <param name="fileSize">ファイルサイズ（バイト）</param>
+    /// <returns>最適なバッファサイズ</returns>
+    private static int GetOptimalBufferSize(long fileSize)
     {
-        var fileName = Path.GetFileName(filePath);
+        // 小さなファイル（1KB未満）: 1KB
+        if (fileSize < 1024)
+            return 1024;
         
-        // 除外パターンのチェック
+        // 中程度のファイル（1MB未満）: 4KB
+        if (fileSize < 1024 * 1024)
+            return 4096;
+        
+        // 大きなファイル（10MB未満）: 8KB
+        if (fileSize < 10 * 1024 * 1024)
+            return 8192;
+        
+        // 非常に大きなファイル: 16KB
+        return 16384;
+    }
+
+    private bool ShouldIncludeFile(string filePath, IOptionContext options)
+    {
+        var fileName = _pathHelper.GetFileName(filePath);
+        
+        // 除外パターンのチェック（StringComparison最適化）
         var excludePattern = options.GetStringValue(OptionNames.ExcludePattern);
-        if (excludePattern != null)
+        if (!string.IsNullOrEmpty(excludePattern))
         {
-            var excludeRegex = new Regex(excludePattern, RegexOptions.IgnoreCase);
-            if (excludeRegex.IsMatch(fileName))
-                return false;
+            // 単純な文字列比較であればRegexよりも高速
+            if (excludePattern.Contains('*') || excludePattern.Contains('?'))
+            {
+                if (Regex.IsMatch(fileName, excludePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                    return false;
+            }
+            else
+            {
+                // 完全一致比較の場合はStringComparison.OrdinalIgnoreCaseを使用
+                if (fileName.Equals(excludePattern, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
         }
         
-        // 包含パターンのチェック
+        // 包含パターンのチェック（StringComparison最適化）
         var includePattern = options.GetStringValue(OptionNames.IncludePattern);
-        if (includePattern != null)
+        if (!string.IsNullOrEmpty(includePattern))
         {
-            var includeRegex = new Regex(includePattern, RegexOptions.IgnoreCase);
-            if (!includeRegex.IsMatch(fileName))
-                return false;
+            // 単純な文字列比較であればRegexよりも高速
+            if (includePattern.Contains('*') || includePattern.Contains('?'))
+            {
+                if (!Regex.IsMatch(fileName, includePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                    return false;
+            }
+            else
+            {
+                // 完全一致比較の場合はStringComparison.OrdinalIgnoreCaseを使用
+                if (!fileName.Equals(includePattern, StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
         }
         
         return true;
@@ -179,115 +227,183 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
 
     private async Task<FileResult> ProcessFileAsync(string filePath, IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
     {
+        // オプション値を一度だけ取得してキャッシュ
+        var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
+        var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
+        var maxCount = options.GetIntValue(OptionNames.MaxCount);
+        
+        // 標準入力の処理
+        if (filePath == "-")
+        {
+            return await ProcessStandardInputAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken);
+        }
+        
+        // ArrayPoolを使用してメモリ効率を向上
+        var estimatedSize = maxCount ?? 1000;
+        var rentedArray = _matchPool.Rent(estimatedSize);
+        var actualCount = 0;
+        var hasMaxCountLimit = maxCount.HasValue;
+        var maxCountValue = maxCount ?? int.MaxValue;
+        
         try
         {
-            var matches = new List<MatchResult>();
             var lineNumber = 0;
-            var matchCount = 0;
             
-            // 標準入力の処理
-            if (filePath == "-")
-            {
-                return await ProcessStandardInputAsync(strategy, options, cancellationToken);
-            }
-            
-            var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
-            var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
-            var maxCount = options.GetIntValue(OptionNames.MaxCount);
+            // ファイルサイズに応じたバッファサイズの動的調整
+            var fileInfo = _fileSystem.GetFileInfo(filePath);
+            var bufferSize = GetOptimalBufferSize(fileInfo.Length);
             
             // ファイルの処理（大きなファイルでもメモリ効率的）
-            using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.SequentialScan);
+            using var fileStream = _fileSystem.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
             using var reader = new StreamReader(fileStream, Encoding.UTF8);
             
             string? line;
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            
+            // 条件分岐の最適化: 反転マッチと通常マッチで処理パスを分離
+            if (invertMatch)
             {
-                lineNumber++;
-                cancellationToken.ThrowIfCancellationRequested();
-                
-                var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                var lineMatchList = lineMatches.ToList();
-                
-                var hasMatches = lineMatchList.Count > 0;
-                
-                // 反転マッチの処理
-                if (invertMatch)
+                // 反転マッチ専用の処理パス
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
-                    hasMatches = !hasMatches;
+                    lineNumber++;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                    
+                    // 反転マッチの場合は存在確認のみ行う
+                    var hasMatches = !lineMatches.Any();
                     if (hasMatches)
                     {
-                        // 反転マッチの場合は行全体をマッチとする
-                        matches.Add(new MatchResult(filePath, lineNumber, line, line.AsMemory(), 0, line.Length));
-                        matchCount++;
+                        // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
+                        var lineMemory = line.AsMemory();
+                        rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
+                        
+                        // 最大マッチ数の制限チェック（最適化）
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            break;
                     }
                 }
-                else if (hasMatches)
+            }
+            else
+            {
+                // 通常マッチ専用の処理パス
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
-                    matches.AddRange(lineMatchList);
-                    matchCount += lineMatchList.Count;
+                    lineNumber++;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                    
+                    // 通常マッチの場合は実際のマッチを処理
+                    foreach (var match in lineMatches)
+                    {
+                        rentedArray[actualCount++] = match;
+                        
+                        // 最大マッチ数の制限チェック（最適化）
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            goto exitLoop;
+                    }
                 }
-                
-                // 最大マッチ数の制限
-                if (maxCount.HasValue && matchCount >= maxCount.Value)
-                    break;
             }
             
-            return new FileResult(filePath, matches.AsReadOnly(), matchCount);
+            exitLoop:
+            
+            // 最終的に必要な分だけコピーしてReadOnlyListを作成
+            var results = new MatchResult[actualCount];
+            Array.Copy(rentedArray, results, actualCount);
+            
+            return new FileResult(filePath, results.AsReadOnly(), actualCount);
         }
         catch (Exception ex)
         {
             return new FileResult(filePath, [], 0, true, ex.Message);
         }
+        finally
+        {
+            _matchPool.Return(rentedArray, clearArray: true);
+        }
     }
 
-    private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
     {
-        var matches = new List<MatchResult>();
+        // ArrayPoolを使用してメモリ効率を向上
+        var estimatedSize = maxCount ?? 1000;
+        var rentedArray = _matchPool.Rent(estimatedSize);
+        var actualCount = 0;
         var lineNumber = 0;
-        var matchCount = 0;
+        var hasMaxCountLimit = maxCount.HasValue;
+        var maxCountValue = maxCount ?? int.MaxValue;
         const string fileName = "(standard input)";
-        
-        var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
-        var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
-        var maxCount = options.GetIntValue(OptionNames.MaxCount);
         
         try
         {
             string? line;
-            while ((line = await Console.In.ReadLineAsync(cancellationToken)) != null)
+            
+            // ファイルシステムの抽象化を使用して標準入力を取得
+            using var reader = _fileSystem.GetStandardInput();
+            
+            // 条件分岐の最適化: 反転マッチと通常マッチで処理パスを分離
+            if (invertMatch)
             {
-                lineNumber++;
-                cancellationToken.ThrowIfCancellationRequested();
-                
-                var lineMatches = strategy.FindMatches(line, pattern, options, fileName, lineNumber);
-                var lineMatchList = lineMatches.ToList();
-                
-                var hasMatches = lineMatchList.Count > 0;
-                
-                if (invertMatch)
+                // 反転マッチ専用の処理パス
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
-                    hasMatches = !hasMatches;
+                    lineNumber++;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    var lineMatches = strategy.FindMatches(line, pattern, options, fileName, lineNumber);
+                    
+                    // 反転マッチの場合は存在確認のみ行う
+                    var hasMatches = !lineMatches.Any();
                     if (hasMatches)
                     {
-                        matches.Add(new MatchResult(fileName, lineNumber, line, line.AsMemory(), 0, line.Length));
-                        matchCount++;
+                        // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
+                        var lineMemory = line.AsMemory();
+                        rentedArray[actualCount++] = new MatchResult(fileName, lineNumber, line, lineMemory, 0, line.Length);
+                        
+                        // 最大マッチ数の制限チェック（最適化）
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            break;
                     }
                 }
-                else if (hasMatches)
+            }
+            else
+            {
+                // 通常マッチ専用の処理パス
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
-                    matches.AddRange(lineMatchList);
-                    matchCount += lineMatchList.Count;
+                    lineNumber++;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    var lineMatches = strategy.FindMatches(line, pattern, options, fileName, lineNumber);
+                    
+                    // 通常マッチの場合は実際のマッチを処理
+                    foreach (var match in lineMatches)
+                    {
+                        rentedArray[actualCount++] = match;
+                        
+                        // 最大マッチ数の制限チェック（最適化）
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            goto exitLoop;
+                    }
                 }
-                
-                if (maxCount.HasValue && matchCount >= maxCount.Value)
-                    break;
             }
             
-            return new FileResult(fileName, matches.AsReadOnly(), matchCount);
+            exitLoop:
+            
+            // 最終的に必要な分だけコピーしてReadOnlyListを作成
+            var results = new MatchResult[actualCount];
+            Array.Copy(rentedArray, results, actualCount);
+            
+            return new FileResult(fileName, results.AsReadOnly(), actualCount);
         }
         catch (Exception ex)
         {
             return new FileResult(fileName, [], 0, true, ex.Message);
+        }
+        finally
+        {
+            _matchPool.Return(rentedArray, clearArray: true);
         }
     }
 }
