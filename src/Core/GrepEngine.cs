@@ -207,31 +207,39 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 cancellationToken.ThrowIfCancellationRequested();
                 
                 var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                var lineMatchList = lineMatches.ToList();
-                
-                var hasMatches = lineMatchList.Count > 0;
                 
                 // 反転マッチの処理
                 if (invertMatch)
                 {
-                    hasMatches = !hasMatches;
+                    // 反転マッチの場合は存在確認のみ行う
+                    var hasMatches = !lineMatches.Any();
                     if (hasMatches)
                     {
                         // 反転マッチの場合は行全体をマッチとする
                         matches.Add(new MatchResult(filePath, lineNumber, line, line.AsMemory(), 0, line.Length));
                         matchCount++;
+                        
+                        // 最大マッチ数の制限チェック
+                        if (maxCount.HasValue && matchCount >= maxCount.Value)
+                            break;
                     }
                 }
-                else if (hasMatches)
+                else
                 {
-                    matches.AddRange(lineMatchList);
-                    matchCount += lineMatchList.Count;
+                    // 通常マッチの場合は実際のマッチを処理
+                    foreach (var match in lineMatches)
+                    {
+                        matches.Add(match);
+                        matchCount++;
+                        
+                        // 最大マッチ数の制限チェック
+                        if (maxCount.HasValue && matchCount >= maxCount.Value)
+                            goto exitLoop;
+                    }
                 }
-                
-                // 最大マッチ数の制限
-                if (maxCount.HasValue && matchCount >= maxCount.Value)
-                    break;
             }
+            
+            exitLoop:
             
             return new FileResult(filePath, matches.AsReadOnly(), matchCount);
         }
@@ -257,28 +265,37 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 cancellationToken.ThrowIfCancellationRequested();
                 
                 var lineMatches = strategy.FindMatches(line, pattern, options, fileName, lineNumber);
-                var lineMatchList = lineMatches.ToList();
-                
-                var hasMatches = lineMatchList.Count > 0;
                 
                 if (invertMatch)
                 {
-                    hasMatches = !hasMatches;
+                    // 反転マッチの場合は存在確認のみ行う
+                    var hasMatches = !lineMatches.Any();
                     if (hasMatches)
                     {
                         matches.Add(new MatchResult(fileName, lineNumber, line, line.AsMemory(), 0, line.Length));
                         matchCount++;
+                        
+                        // 最大マッチ数の制限チェック
+                        if (maxCount.HasValue && matchCount >= maxCount.Value)
+                            break;
                     }
                 }
-                else if (hasMatches)
+                else
                 {
-                    matches.AddRange(lineMatchList);
-                    matchCount += lineMatchList.Count;
+                    // 通常マッチの場合は実際のマッチを処理
+                    foreach (var match in lineMatches)
+                    {
+                        matches.Add(match);
+                        matchCount++;
+                        
+                        // 最大マッチ数の制限チェック
+                        if (maxCount.HasValue && matchCount >= maxCount.Value)
+                            goto exitLoop;
+                    }
                 }
-                
-                if (maxCount.HasValue && matchCount >= maxCount.Value)
-                    break;
             }
+            
+            exitLoop:
             
             return new FileResult(fileName, matches.AsReadOnly(), matchCount);
         }
