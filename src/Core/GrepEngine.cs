@@ -1,3 +1,4 @@
+using GrepCompatible.Abstractions;
 using GrepCompatible.Constants;
 using GrepCompatible.Models;
 using GrepCompatible.Strategies;
@@ -26,9 +27,11 @@ public interface IGrepEngine
 /// <summary>
 /// 並列処理対応のGrep実装
 /// </summary>
-public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEngine
+public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSystem fileSystem, IPath pathHelper) : IGrepEngine
 {
     private readonly IMatchStrategyFactory _strategyFactory = strategyFactory ?? throw new ArgumentNullException(nameof(strategyFactory));
+    private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
+    private readonly IPath _pathHelper = pathHelper ?? throw new ArgumentNullException(nameof(pathHelper));
     private static readonly string[] sourceArray = ["-"];
     private static readonly ArrayPool<MatchResult> _matchPool = ArrayPool<MatchResult>.Shared;
 
@@ -94,7 +97,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 var expandedFiles = await ExpandRecursiveAsync(filePattern, options, cancellationToken);
                 files.AddRange(expandedFiles);
             }
-            else if (File.Exists(filePattern))
+            else if (_fileSystem.FileExists(filePattern))
             {
                 files.Add(filePattern);
             }
@@ -113,10 +116,10 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
     {
         var files = new List<string>();
         
-        if (Directory.Exists(path))
+        if (_fileSystem.DirectoryExists(path))
         {
             var searchOption = SearchOption.AllDirectories;
-            var allFiles = Directory.EnumerateFiles(path, "*", searchOption);
+            var allFiles = _fileSystem.EnumerateFiles(path, "*", searchOption);
             
             foreach (var file in allFiles)
             {
@@ -128,7 +131,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
                 }
             }
         }
-        else if (File.Exists(path))
+        else if (_fileSystem.FileExists(path))
         {
             files.Add(path);
         }
@@ -136,16 +139,16 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         return Task.FromResult<IEnumerable<string>>(files);
     }
 
-    private static IEnumerable<string> ExpandGlobPattern(string pattern)
+    private IEnumerable<string> ExpandGlobPattern(string pattern)
     {
         try
         {
-            var directory = Path.GetDirectoryName(pattern) ?? ".";
-            var fileName = Path.GetFileName(pattern);
+            var directory = _pathHelper.GetDirectoryName(pattern) ?? ".";
+            var fileName = _pathHelper.GetFileName(pattern);
             
-            if (Directory.Exists(directory))
+            if (_fileSystem.DirectoryExists(directory))
             {
-                return Directory.EnumerateFiles(directory, fileName, SearchOption.TopDirectoryOnly);
+                return _fileSystem.EnumerateFiles(directory, fileName, SearchOption.TopDirectoryOnly);
             }
         }
         catch (Exception)
@@ -179,9 +182,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         return 16384;
     }
 
-    private static bool ShouldIncludeFile(string filePath, IOptionContext options)
+    private bool ShouldIncludeFile(string filePath, IOptionContext options)
     {
-        var fileName = Path.GetFileName(filePath);
+        var fileName = _pathHelper.GetFileName(filePath);
         
         // 除外パターンのチェック（StringComparison最適化）
         var excludePattern = options.GetStringValue(OptionNames.ExcludePattern);
@@ -247,11 +250,11 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
             var lineNumber = 0;
             
             // ファイルサイズに応じたバッファサイズの動的調整
-            var fileInfo = new FileInfo(filePath);
+            var fileInfo = _fileSystem.GetFileInfo(filePath);
             var bufferSize = GetOptimalBufferSize(fileInfo.Length);
             
             // ファイルの処理（大きなファイルでもメモリ効率的）
-            using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
+            using var fileStream = _fileSystem.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
             using var reader = new StreamReader(fileStream, Encoding.UTF8);
             
             string? line;
@@ -336,11 +339,14 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
         {
             string? line;
             
+            // ファイルシステムの抽象化を使用して標準入力を取得
+            using var reader = _fileSystem.GetStandardInput();
+            
             // 条件分岐の最適化: 反転マッチと通常マッチで処理パスを分離
             if (invertMatch)
             {
                 // 反転マッチ専用の処理パス
-                while ((line = await Console.In.ReadLineAsync(cancellationToken)) != null)
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
                     lineNumber++;
                     cancellationToken.ThrowIfCancellationRequested();
@@ -364,7 +370,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory) : IGrepEn
             else
             {
                 // 通常マッチ専用の処理パス
-                while ((line = await Console.In.ReadLineAsync(cancellationToken)) != null)
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
                     lineNumber++;
                     cancellationToken.ThrowIfCancellationRequested();
