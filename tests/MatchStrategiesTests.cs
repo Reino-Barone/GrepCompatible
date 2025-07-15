@@ -8,17 +8,16 @@ namespace GrepCompatible.Test;
 
 public class MatchStrategiesTests
 {
-    private readonly Mock<IOptionContext> _mockOptions = new();
-
     [Fact]
     public void FixedStringMatchStrategy_CanApply_ReturnsTrueWhenFixedStringsOptionIsSet()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new FixedStringMatchStrategy();
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FixedStrings)).Returns(true);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FixedStrings)).Returns(true);
 
         // Act
-        var result = strategy.CanApply(_mockOptions.Object);
+        var result = strategy.CanApply(mockOptions.Object);
 
         // Assert
         Assert.True(result);
@@ -28,11 +27,12 @@ public class MatchStrategiesTests
     public void FixedStringMatchStrategy_CanApply_ReturnsFalseWhenFixedStringsOptionIsNotSet()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new FixedStringMatchStrategy();
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FixedStrings)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FixedStrings)).Returns(false);
 
         // Act
-        var result = strategy.CanApply(_mockOptions.Object);
+        var result = strategy.CanApply(mockOptions.Object);
 
         // Assert
         Assert.False(result);
@@ -42,73 +42,92 @@ public class MatchStrategiesTests
     public void FixedStringMatchStrategy_FindMatches_FindsSingleMatch()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new FixedStringMatchStrategy();
         var line = "hello world";
         var pattern = "world";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
+        var expectedStartIndex = line.IndexOf(pattern);
+        var expectedEndIndex = expectedStartIndex + pattern.Length;
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Single(matches);
-        Assert.Equal("test.txt", matches[0].FileName);
-        Assert.Equal(1, matches[0].LineNumber);
-        Assert.Equal(line, matches[0].Line);
-        Assert.Equal("world", matches[0].MatchedText.ToString());
-        Assert.Equal(6, matches[0].StartIndex);
-        Assert.Equal(11, matches[0].EndIndex);
+        var match = matches[0];
+        Assert.Equal("test.txt", match.FileName);
+        Assert.Equal(1, match.LineNumber);
+        Assert.Equal(line, match.Line);
+        Assert.Equal(pattern, match.MatchedText.ToString());
+        Assert.Equal(expectedStartIndex, match.StartIndex);
+        Assert.Equal(expectedEndIndex, match.EndIndex);
     }
 
     [Fact]
     public void FixedStringMatchStrategy_FindMatches_FindsMultipleMatches()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new FixedStringMatchStrategy();
         var line = "test test test";
         var pattern = "test";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
+        var expectedPositions = new[] { 0, 5, 10 };
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Equal(3, matches.Length);
-        Assert.Equal(0, matches[0].StartIndex);
-        Assert.Equal(5, matches[1].StartIndex);
-        Assert.Equal(10, matches[2].StartIndex);
+        for (int i = 0; i < matches.Length; i++)
+        {
+            Assert.Equal(expectedPositions[i], matches[i].StartIndex);
+            Assert.Equal(expectedPositions[i] + pattern.Length, matches[i].EndIndex);
+            Assert.Equal(pattern, matches[i].MatchedText.ToString());
+        }
     }
 
     [Fact]
     public void FixedStringMatchStrategy_FindMatches_IgnoreCaseOption()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new FixedStringMatchStrategy();
         var line = "Hello WORLD";
         var pattern = "world";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(true);
+        var expectedMatch = "WORLD";
+        var expectedStartIndex = line.IndexOf(expectedMatch, StringComparison.OrdinalIgnoreCase);
+        var expectedEndIndex = expectedStartIndex + expectedMatch.Length;
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(true);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Single(matches);
-        Assert.Equal("WORLD", matches[0].MatchedText.ToString());
-        Assert.Equal(6, matches[0].StartIndex);
-        Assert.Equal(11, matches[0].EndIndex);
+        var match = matches[0];
+        Assert.Equal(expectedMatch, match.MatchedText.ToString());
+        Assert.Equal(expectedStartIndex, match.StartIndex);
+        Assert.Equal(expectedEndIndex, match.EndIndex);
     }
 
     [Fact]
     public void FixedStringMatchStrategy_FindMatches_EmptyPattern_ReturnsEmpty()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new FixedStringMatchStrategy();
         var line = "hello world";
         var pattern = "";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Empty(matches);
@@ -118,11 +137,13 @@ public class MatchStrategiesTests
     public void RegexMatchStrategy_CanApply_ReturnsTrueWhenExtendedRegexpOptionIsSet()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new RegexMatchStrategy();
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.ExtendedRegexp)).Returns(true);
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.ExtendedRegexp)).Returns(true);
 
         // Act
-        var result = strategy.CanApply(_mockOptions.Object);
+        var result = strategy.CanApply(mockOptions.Object);
 
         // Assert
         Assert.True(result);
@@ -132,13 +153,15 @@ public class MatchStrategiesTests
     public void RegexMatchStrategy_CanApply_ReturnsTrueWhenNoSpecialOptionsSet()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new RegexMatchStrategy();
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.ExtendedRegexp)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.FixedStrings)).Returns(false);
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.WholeWord)).Returns(false);
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.ExtendedRegexp)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FixedStrings)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.WholeWord)).Returns(false);
 
         // Act
-        var result = strategy.CanApply(_mockOptions.Object);
+        var result = strategy.CanApply(mockOptions.Object);
 
         // Assert
         Assert.True(result);
@@ -148,49 +171,63 @@ public class MatchStrategiesTests
     public void RegexMatchStrategy_FindMatches_SimpleRegexPattern()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new RegexMatchStrategy();
         var line = "hello 123 world";
         var pattern = @"\d+";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
+        var expectedMatch = "123";
+        var expectedStartIndex = line.IndexOf(expectedMatch);
+        var expectedEndIndex = expectedStartIndex + expectedMatch.Length;
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Single(matches);
-        Assert.Equal("123", matches[0].MatchedText.ToString());
-        Assert.Equal(6, matches[0].StartIndex);
-        Assert.Equal(9, matches[0].EndIndex);
+        var match = matches[0];
+        Assert.Equal(expectedMatch, match.MatchedText.ToString());
+        Assert.Equal(expectedStartIndex, match.StartIndex);
+        Assert.Equal(expectedEndIndex, match.EndIndex);
     }
 
     [Fact]
     public void RegexMatchStrategy_FindMatches_InvalidRegexPattern_TreatsAsFixedString()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new RegexMatchStrategy();
         var line = "hello [world";
         var pattern = "[world";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
+        var expectedMatch = "[world";
+        var expectedStartIndex = line.IndexOf(expectedMatch);
+        var expectedEndIndex = expectedStartIndex + expectedMatch.Length;
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Single(matches);
-        Assert.Equal("[world", matches[0].MatchedText.ToString());
-        Assert.Equal(6, matches[0].StartIndex);
-        Assert.Equal(12, matches[0].EndIndex);
+        var match = matches[0];
+        Assert.Equal(expectedMatch, match.MatchedText.ToString());
+        Assert.Equal(expectedStartIndex, match.StartIndex);
+        Assert.Equal(expectedEndIndex, match.EndIndex);
     }
 
     [Fact]
     public void WholeWordMatchStrategy_CanApply_ReturnsTrueWhenWholeWordOptionIsSet()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new WholeWordMatchStrategy();
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.WholeWord)).Returns(true);
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.WholeWord)).Returns(true);
 
         // Act
-        var result = strategy.CanApply(_mockOptions.Object);
+        var result = strategy.CanApply(mockOptions.Object);
 
         // Assert
         Assert.True(result);
@@ -200,51 +237,65 @@ public class MatchStrategiesTests
     public void WholeWordMatchStrategy_FindMatches_MatchesWholeWordsOnly()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new WholeWordMatchStrategy();
         var line = "hello world helloworld";
         var pattern = "hello";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
+        var expectedMatch = "hello";
+        var expectedStartIndex = line.IndexOf(expectedMatch);
+        var expectedEndIndex = expectedStartIndex + expectedMatch.Length;
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Single(matches);
-        Assert.Equal("hello", matches[0].MatchedText.ToString());
-        Assert.Equal(0, matches[0].StartIndex);
-        Assert.Equal(5, matches[0].EndIndex);
+        var match = matches[0];
+        Assert.Equal(expectedMatch, match.MatchedText.ToString());
+        Assert.Equal(expectedStartIndex, match.StartIndex);
+        Assert.Equal(expectedEndIndex, match.EndIndex);
     }
 
     [Fact]
     public void WholeWordMatchStrategy_FindMatches_IgnoreCaseOption()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new WholeWordMatchStrategy();
         var line = "Hello WORLD";
         var pattern = "hello";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(true);
+        var expectedMatch = "Hello";
+        var expectedStartIndex = line.IndexOf(expectedMatch, StringComparison.OrdinalIgnoreCase);
+        var expectedEndIndex = expectedStartIndex + expectedMatch.Length;
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(true);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Single(matches);
-        Assert.Equal("Hello", matches[0].MatchedText.ToString());
-        Assert.Equal(0, matches[0].StartIndex);
-        Assert.Equal(5, matches[0].EndIndex);
+        var match = matches[0];
+        Assert.Equal(expectedMatch, match.MatchedText.ToString());
+        Assert.Equal(expectedStartIndex, match.StartIndex);
+        Assert.Equal(expectedEndIndex, match.EndIndex);
     }
 
     [Fact]
     public void WholeWordMatchStrategy_FindMatches_EmptyPattern_ReturnsEmpty()
     {
         // Arrange
+        var mockOptions = new Mock<IOptionContext>();
         var strategy = new WholeWordMatchStrategy();
         var line = "hello world";
         var pattern = "";
-        _mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
+        
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.IgnoreCase)).Returns(false);
 
         // Act
-        var matches = strategy.FindMatches(line, pattern, _mockOptions.Object, "test.txt", 1).ToArray();
+        var matches = strategy.FindMatches(line, pattern, mockOptions.Object, "test.txt", 1).ToArray();
 
         // Assert
         Assert.Empty(matches);
