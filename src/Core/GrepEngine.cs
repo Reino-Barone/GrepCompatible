@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Buffers.Text;
 
 namespace GrepCompatible.Core;
 
@@ -36,6 +37,11 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     private static readonly ArrayPool<MatchResult> _matchPool = ArrayPool<MatchResult>.Shared;
     private static readonly ConcurrentDictionary<string, Regex> _regexCache = new();
     private static readonly object _regexCacheLock = new();
+    
+    // 正規表現の特殊文字セット（.NET 8+のSearchValues使用）
+    private static readonly SearchValues<char> _regexSpecialChars = SearchValues.Create([
+        '.', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\', '+', '*', '?'
+    ]);
 
     public async Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default)
     {
@@ -194,14 +200,137 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         if (string.IsNullOrEmpty(globPattern))
             return string.Empty;
         
-        // Escape the entire glob pattern
-        string escapedPattern = Regex.Escape(globPattern);
+        // Spanを使用してメモリ効率的に処理
+        ReadOnlySpan<char> pattern = globPattern.AsSpan();
         
-        // Replace escaped glob tokens with regex equivalents
-        escapedPattern = escapedPattern.Replace(@"\*", ".*").Replace(@"\?", ".");
+        // 結果を格納するためのSpanバッファ（推定サイズ）
+        Span<char> buffer = stackalloc char[globPattern.Length * 2];
+        var resultLength = 0;
         
-        // Add start and end anchors
-        return $"^{escapedPattern}$";
+        // 開始アンカーを追加
+        buffer[resultLength++] = '^';
+        
+        for (int i = 0; i < pattern.Length; i++)
+        {
+            char c = pattern[i];
+            
+            switch (c)
+            {
+                case '*':
+                    // * → .*
+                    buffer[resultLength++] = '.';
+                    buffer[resultLength++] = '*';
+                    break;
+                
+                case '?':
+                    // ? → .
+                    buffer[resultLength++] = '.';
+                    break;
+                
+                case '.':
+                case '^':
+                case '$':
+                case '(':
+                case ')':
+                case '[':
+                case ']':
+                case '{':
+                case '}':
+                case '|':
+                case '\\':
+                case '+':
+                    // 正規表現の特殊文字をエスケープ
+                    buffer[resultLength++] = '\\';
+                    buffer[resultLength++] = c;
+                    break;
+                
+                default:
+                    // 通常の文字はそのまま
+                    buffer[resultLength++] = c;
+                    break;
+            }
+            
+            // バッファオーバーフロー防止
+            if (resultLength >= buffer.Length - 2)
+            {
+                // バッファが足りない場合は従来の方法にフォールバック
+                return $"^{Regex.Escape(globPattern).Replace(@"\*", ".*").Replace(@"\?", ".")}$";
+            }
+        }
+        
+        // 終了アンカーを追加
+        buffer[resultLength++] = '$';
+        
+        // Spanから文字列を作成
+        return new string(buffer[..resultLength]);
+    }
+
+    /// <summary>
+    /// SearchValues&lt;char&gt;を使用したより効率的なglobパターン変換
+    /// </summary>
+    /// <param name="globPattern">globパターン</param>
+    /// <returns>正規表現パターン</returns>
+    private static string ConvertGlobToRegexOptimized(string globPattern)
+    {
+        if (string.IsNullOrEmpty(globPattern))
+            return string.Empty;
+        
+        ReadOnlySpan<char> pattern = globPattern.AsSpan();
+        
+        // 結果を格納するためのバッファ（推定サイズ）
+        var buffer = new char[globPattern.Length * 2 + 2];
+        var resultLength = 0;
+        
+        // 開始アンカーを追加
+        buffer[resultLength++] = '^';
+        
+        int i = 0;
+        while (i < pattern.Length)
+        {
+            // SearchValuesを使用して特殊文字の次の出現位置を効率的に検索
+            int nextSpecialIndex = pattern[i..].IndexOfAny(_regexSpecialChars);
+            
+            if (nextSpecialIndex == -1)
+            {
+                // 特殊文字が見つからない場合、残りの文字をそのままコピー
+                var remaining = pattern[i..];
+                remaining.CopyTo(buffer.AsSpan(resultLength));
+                resultLength += remaining.Length;
+                break;
+            }
+            
+            // 特殊文字までの通常文字をコピー
+            var normalChars = pattern[i..(i + nextSpecialIndex)];
+            normalChars.CopyTo(buffer.AsSpan(resultLength));
+            resultLength += normalChars.Length;
+            
+            // 特殊文字を処理
+            char specialChar = pattern[i + nextSpecialIndex];
+            switch (specialChar)
+            {
+                case '*':
+                    buffer[resultLength++] = '.';
+                    buffer[resultLength++] = '*';
+                    break;
+                
+                case '?':
+                    buffer[resultLength++] = '.';
+                    break;
+                
+                default:
+                    // その他の特殊文字はエスケープ
+                    buffer[resultLength++] = '\\';
+                    buffer[resultLength++] = specialChar;
+                    break;
+            }
+            
+            i += nextSpecialIndex + 1;
+        }
+        
+        // 終了アンカーを追加
+        buffer[resultLength++] = '$';
+        
+        return new string(buffer, 0, resultLength);
     }
 
     /// <summary>
@@ -216,7 +345,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         
         return _regexCache.GetOrAdd(key, _ =>
         {
-            var regexPattern = isGlobPattern ? ConvertGlobToRegex(pattern) : pattern;
+            var regexPattern = isGlobPattern ? ConvertGlobToRegexOptimized(pattern) : pattern;
             return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
         });
     }
