@@ -231,11 +231,27 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         var pattern = options.GetStringArgumentValue(ArgumentNames.Pattern) ?? "";
         var invertMatch = options.GetFlagValue(OptionNames.InvertMatch);
         var maxCount = options.GetIntValue(OptionNames.MaxCount);
+        var contextBefore = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextBefore) ?? 0;
+        var contextAfter = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextAfter) ?? 0;
+        var needsContext = contextBefore > 0 || contextAfter > 0;
         
         // 標準入力の処理
         if (filePath == "-")
         {
-            return await ProcessStandardInputAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken);
+            if (needsContext)
+            {
+                return await ProcessStandardInputWithContextAsync(strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken);
+            }
+            else
+            {
+                return await ProcessStandardInputAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken);
+            }
+        }
+        
+        // コンテキストが必要な場合は専用の処理を使用
+        if (needsContext)
+        {
+            return await ProcessFileWithContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken);
         }
         
         // ArrayPoolを使用してメモリ効率を向上
@@ -324,6 +340,110 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         }
     }
 
+    private async Task<FileResult> ProcessFileWithContextAsync(string filePath, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
+    {
+        try
+        {
+            // ファイルサイズに応じたバッファサイズの動的調整
+            var fileInfo = _fileSystem.GetFileInfo(filePath);
+            var bufferSize = GetOptimalBufferSize(fileInfo.Length);
+            
+            // ファイルの全行を読み込み
+            using var fileStream = _fileSystem.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
+            using var reader = new StreamReader(fileStream, Encoding.UTF8);
+            
+            var allLines = new List<string>();
+            var lineNumber = 0;
+            string? line;
+            
+            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            {
+                allLines.Add(line);
+                lineNumber++;
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            
+            // マッチを見つけてコンテキストを含む結果を作成
+            var matches = new List<MatchResult>();
+            var contextualMatches = new List<ContextualMatchResult>();
+            var hasMaxCountLimit = maxCount.HasValue;
+            var maxCountValue = maxCount ?? int.MaxValue;
+            
+            for (int i = 0; i < allLines.Count; i++)
+            {
+                var currentLine = allLines[i];
+                var currentLineNumber = i + 1;
+                
+                var lineMatches = strategy.FindMatches(currentLine, pattern, options, filePath, currentLineNumber);
+                
+                if (invertMatch)
+                {
+                    // 反転マッチの場合は存在確認のみ行う
+                    var hasMatches = !lineMatches.Any();
+                    if (hasMatches)
+                    {
+                        // 反転マッチの場合は行全体をマッチとする
+                        var lineMemory = currentLine.AsMemory();
+                        var match = new MatchResult(filePath, currentLineNumber, currentLine, lineMemory, 0, currentLine.Length);
+                        matches.Add(match);
+                        
+                        // コンテキストを作成
+                        var contextualMatch = CreateContextualMatch(match, allLines, i, contextBefore, contextAfter);
+                        contextualMatches.Add(contextualMatch);
+                        
+                        // 最大マッチ数の制限チェック
+                        if (hasMaxCountLimit && matches.Count >= maxCountValue)
+                            break;
+                    }
+                }
+                else
+                {
+                    // 通常マッチの場合は実際のマッチを処理
+                    foreach (var match in lineMatches)
+                    {
+                        matches.Add(match);
+                        
+                        // コンテキストを作成
+                        var contextualMatch = CreateContextualMatch(match, allLines, i, contextBefore, contextAfter);
+                        contextualMatches.Add(contextualMatch);
+                        
+                        // 最大マッチ数の制限チェック
+                        if (hasMaxCountLimit && matches.Count >= maxCountValue)
+                            goto exitLoop;
+                    }
+                }
+            }
+            
+            exitLoop:
+            
+            return new FileResult(filePath, matches.AsReadOnly(), matches.Count, false, null, contextualMatches.AsReadOnly());
+        }
+        catch (Exception ex)
+        {
+            return new FileResult(filePath, [], 0, true, ex.Message);
+        }
+    }
+
+    private ContextualMatchResult CreateContextualMatch(MatchResult match, List<string> allLines, int matchIndex, int contextBefore, int contextAfter)
+    {
+        var beforeContext = new List<ContextLine>();
+        var afterContext = new List<ContextLine>();
+        
+        // Before context
+        for (int j = Math.Max(0, matchIndex - contextBefore); j < matchIndex; j++)
+        {
+            beforeContext.Add(new ContextLine(match.FileName, j + 1, allLines[j], false));
+        }
+        
+        // After context
+        for (int j = matchIndex + 1; j <= Math.Min(allLines.Count - 1, matchIndex + contextAfter); j++)
+        {
+            afterContext.Add(new ContextLine(match.FileName, j + 1, allLines[j], false));
+        }
+        
+        return new ContextualMatchResult(match, beforeContext.AsReadOnly(), afterContext.AsReadOnly());
+    }
+
     private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
     {
         // ArrayPoolを使用してメモリ効率を向上
@@ -404,6 +524,87 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         finally
         {
             _matchPool.Return(rentedArray, clearArray: true);
+        }
+    }
+
+    private async Task<FileResult> ProcessStandardInputWithContextAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
+    {
+        try
+        {
+            const string fileName = "(standard input)";
+            
+            // 標準入力の全行を読み込み
+            using var reader = _fileSystem.GetStandardInput();
+            
+            var allLines = new List<string>();
+            var lineNumber = 0;
+            string? line;
+            
+            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            {
+                allLines.Add(line);
+                lineNumber++;
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+            
+            // マッチを見つけてコンテキストを含む結果を作成
+            var matches = new List<MatchResult>();
+            var contextualMatches = new List<ContextualMatchResult>();
+            var hasMaxCountLimit = maxCount.HasValue;
+            var maxCountValue = maxCount ?? int.MaxValue;
+            
+            for (int i = 0; i < allLines.Count; i++)
+            {
+                var currentLine = allLines[i];
+                var currentLineNumber = i + 1;
+                
+                var lineMatches = strategy.FindMatches(currentLine, pattern, options, fileName, currentLineNumber);
+                
+                if (invertMatch)
+                {
+                    // 反転マッチの場合は存在確認のみ行う
+                    var hasMatches = !lineMatches.Any();
+                    if (hasMatches)
+                    {
+                        // 反転マッチの場合は行全体をマッチとする
+                        var lineMemory = currentLine.AsMemory();
+                        var match = new MatchResult(fileName, currentLineNumber, currentLine, lineMemory, 0, currentLine.Length);
+                        matches.Add(match);
+                        
+                        // コンテキストを作成
+                        var contextualMatch = CreateContextualMatch(match, allLines, i, contextBefore, contextAfter);
+                        contextualMatches.Add(contextualMatch);
+                        
+                        // 最大マッチ数の制限チェック
+                        if (hasMaxCountLimit && matches.Count >= maxCountValue)
+                            break;
+                    }
+                }
+                else
+                {
+                    // 通常マッチの場合は実際のマッチを処理
+                    foreach (var match in lineMatches)
+                    {
+                        matches.Add(match);
+                        
+                        // コンテキストを作成
+                        var contextualMatch = CreateContextualMatch(match, allLines, i, contextBefore, contextAfter);
+                        contextualMatches.Add(contextualMatch);
+                        
+                        // 最大マッチ数の制限チェック
+                        if (hasMaxCountLimit && matches.Count >= maxCountValue)
+                            goto exitLoop;
+                    }
+                }
+            }
+            
+            exitLoop:
+            
+            return new FileResult(fileName, matches.AsReadOnly(), matches.Count, false, null, contextualMatches.AsReadOnly());
+        }
+        catch (Exception ex)
+        {
+            return new FileResult("(standard input)", [], 0, true, ex.Message);
         }
     }
 }
