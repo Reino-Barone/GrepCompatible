@@ -34,6 +34,8 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     private readonly IPath _pathHelper = pathHelper ?? throw new ArgumentNullException(nameof(pathHelper));
     private static readonly string[] sourceArray = ["-"];
     private static readonly ArrayPool<MatchResult> _matchPool = ArrayPool<MatchResult>.Shared;
+    private static readonly ConcurrentDictionary<string, Regex> _regexCache = new();
+    private static readonly object _regexCacheLock = new();
 
     public async Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default)
     {
@@ -202,49 +204,111 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         return $"^{escapedPattern}$";
     }
 
+    /// <summary>
+    /// パターンをコンパイルされた正規表現として取得（キャッシュ機能付き）
+    /// </summary>
+    /// <param name="pattern">パターン（globまたは正規表現）</param>
+    /// <param name="isGlobPattern">globパターンかどうか</param>
+    /// <returns>コンパイルされた正規表現</returns>
+    private static Regex GetCompiledRegex(string pattern, bool isGlobPattern)
+    {
+        var key = isGlobPattern ? $"glob:{pattern}" : $"regex:{pattern}";
+        
+        return _regexCache.GetOrAdd(key, _ =>
+        {
+            var regexPattern = isGlobPattern ? ConvertGlobToRegex(pattern) : pattern;
+            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        });
+    }
+
+    /// <summary>
+    /// 複数パターンのマッチングを実行
+    /// </summary>
+    /// <param name="fileName">ファイル名</param>
+    /// <param name="fullPath">フルパス（正規化済み）</param>
+    /// <param name="patterns">パターンのリスト</param>
+    /// <param name="isExclude">除外パターンかどうか</param>
+    /// <returns>マッチしたかどうか</returns>
+    private static bool MatchesAnyPattern(string fileName, string fullPath, IEnumerable<string> patterns, bool isExclude)
+    {
+        foreach (var pattern in patterns)
+        {
+            if (string.IsNullOrEmpty(pattern))
+                continue;
+
+            var isGlobPattern = pattern.Contains('*') || pattern.Contains('?');
+            
+            bool matches;
+            if (isGlobPattern)
+            {
+                var regex = GetCompiledRegex(pattern, true);
+                
+                // パターンに'/'が含まれる場合はフルパスでマッチング、そうでなければファイル名のみ
+                var targetText = pattern.Contains('/') ? fullPath : fileName;
+                matches = regex.IsMatch(targetText);
+            }
+            else
+            {
+                // 非globパターンの場合も同様にパスの判定を行う
+                var targetText = pattern.Contains('/') ? fullPath : fileName;
+                matches = targetText.Equals(pattern, StringComparison.OrdinalIgnoreCase);
+            }
+
+            if (matches)
+                return true;
+        }
+        
+        return false;
+    }
+
     private bool ShouldIncludeFile(string filePath, IOptionContext options)
     {
         var fileName = _pathHelper.GetFileName(filePath);
+        var normalizedPath = filePath.Replace('\\', '/'); // Windowsパスを正規化
         
-        // 除外パターンのチェック（globパターン対応）
-        var excludePattern = options.GetStringValue(OptionNames.ExcludePattern);
-        if (!string.IsNullOrEmpty(excludePattern))
+        // 除外パターンのチェック（複数パターン対応）
+        var excludePatterns = GetPatterns(options, OptionNames.ExcludePattern);
+        if (excludePatterns.Count > 0)
         {
-            // globパターンかどうかをチェック
-            if (excludePattern.Contains('*') || excludePattern.Contains('?'))
-            {
-                var regexPattern = ConvertGlobToRegex(excludePattern);
-                if (Regex.IsMatch(fileName, regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                    return false;
-            }
-            else
-            {
-                // 完全一致比較の場合はStringComparison.OrdinalIgnoreCaseを使用
-                if (fileName.Equals(excludePattern, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            }
+            if (MatchesAnyPattern(fileName, normalizedPath, excludePatterns, true))
+                return false;
         }
         
-        // 包含パターンのチェック（globパターン対応）
-        var includePattern = options.GetStringValue(OptionNames.IncludePattern);
-        if (!string.IsNullOrEmpty(includePattern))
+        // 包含パターンのチェック（複数パターン対応）
+        var includePatterns = GetPatterns(options, OptionNames.IncludePattern);
+        if (includePatterns.Count > 0)
         {
-            // globパターンかどうかをチェック
-            if (includePattern.Contains('*') || includePattern.Contains('?'))
-            {
-                var regexPattern = ConvertGlobToRegex(includePattern);
-                if (!Regex.IsMatch(fileName, regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
-                    return false;
-            }
-            else
-            {
-                // 完全一致比較の場合はStringComparison.OrdinalIgnoreCaseを使用
-                if (!fileName.Equals(includePattern, StringComparison.OrdinalIgnoreCase))
-                    return false;
-            }
+            if (!MatchesAnyPattern(fileName, normalizedPath, includePatterns, false))
+                return false;
         }
         
         return true;
+    }
+
+    /// <summary>
+    /// オプションから複数パターンを取得
+    /// </summary>
+    /// <param name="options">オプションコンテキスト</param>
+    /// <param name="optionName">オプション名</param>
+    /// <returns>パターンのリスト</returns>
+    private static List<string> GetPatterns(IOptionContext options, OptionNames optionName)
+    {
+        var patterns = new List<string>();
+        
+        // 複数の同名オプションの値を全て取得
+        var allOptionValues = options.GetAllStringValues(optionName);
+        
+        foreach (var optionValue in allOptionValues)
+        {
+            if (string.IsNullOrEmpty(optionValue))
+                continue;
+            
+            // 各オプション値内でのコンマ・セミコロン区切りもサポート
+            var splitPatterns = optionValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+            patterns.AddRange(splitPatterns.Select(p => p.Trim()).Where(p => !string.IsNullOrEmpty(p)));
+        }
+        
+        return patterns;
     }
 
     private async Task<FileResult> ProcessFileAsync(string filePath, IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
