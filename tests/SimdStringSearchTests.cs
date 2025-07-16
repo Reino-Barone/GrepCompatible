@@ -135,7 +135,7 @@ public class SimdStringSearchTests
         
         var result = SimdStringSearch.FindAllMatches(source.AsSpan(), pattern.AsSpan(), StringComparison.Ordinal);
         
-        Assert.Equal(0, result.Count);
+        Assert.Empty(result);
     }
 
     [Fact]
