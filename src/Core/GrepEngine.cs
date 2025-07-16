@@ -254,7 +254,39 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             if (resultLength >= buffer.Length - 2)
             {
                 // バッファが足りない場合は従来の方法にフォールバック
-                return $"^{Regex.Escape(globPattern).Replace(@"\*", ".*").Replace(@"\?", ".")}$";
+                var sb = new StringBuilder();
+                sb.Append('^');
+                foreach (char c in globPattern)
+                {
+                    switch (c)
+                    {
+                        case '*':
+                            sb.Append(".*");
+                            break;
+                        case '?':
+                            sb.Append('.');
+                            break;
+                        case '.':
+                        case '^':
+                        case '$':
+                        case '(':
+                        case ')':
+                        case '[':
+                        case ']':
+                        case '{':
+                        case '}':
+                        case '|':
+                        case '\\':
+                        case '+':
+                            sb.Append('\\').Append(c);
+                            break;
+                        default:
+                            sb.Append(c);
+                            break;
+                    }
+                }
+                sb.Append('$');
+                return sb.ToString();
             }
         }
         
