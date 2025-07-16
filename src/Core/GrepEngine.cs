@@ -192,64 +192,14 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         if (string.IsNullOrEmpty(globPattern))
             return string.Empty;
         
-        var regexPattern = new StringBuilder();
-        regexPattern.Append('^'); // 文字列の開始
+        // Escape the entire glob pattern
+        string escapedPattern = Regex.Escape(globPattern);
         
-        for (int i = 0; i < globPattern.Length; i++)
-        {
-            char c = globPattern[i];
-            switch (c)
-            {
-                case '*':
-                    regexPattern.Append(".*"); // 任意の文字の0回以上の繰り返し
-                    break;
-                case '?':
-                    regexPattern.Append('.'); // 任意の1文字
-                    break;
-                case '.':
-                    regexPattern.Append(@"\."); // リテラルドット
-                    break;
-                case '\\':
-                    regexPattern.Append(@"\\"); // リテラルバックスラッシュ
-                    break;
-                case '^':
-                    regexPattern.Append(@"\^"); // リテラルハット
-                    break;
-                case '$':
-                    regexPattern.Append(@"\$"); // リテラルドル
-                    break;
-                case '(':
-                    regexPattern.Append(@"\("); // リテラル開き括弧
-                    break;
-                case ')':
-                    regexPattern.Append(@"\)"); // リテラル閉じ括弧
-                    break;
-                case '[':
-                    regexPattern.Append(@"\["); // リテラル開き角括弧
-                    break;
-                case ']':
-                    regexPattern.Append(@"\]"); // リテラル閉じ角括弧
-                    break;
-                case '{':
-                    regexPattern.Append(@"\{"); // リテラル開き波括弧
-                    break;
-                case '}':
-                    regexPattern.Append(@"\}"); // リテラル閉じ波括弧
-                    break;
-                case '|':
-                    regexPattern.Append(@"\|"); // リテラルパイプ
-                    break;
-                case '+':
-                    regexPattern.Append(@"\+"); // リテラルプラス
-                    break;
-                default:
-                    regexPattern.Append(c); // その他の文字はそのまま
-                    break;
-            }
-        }
+        // Replace escaped glob tokens with regex equivalents
+        escapedPattern = escapedPattern.Replace(@"\*", ".*").Replace(@"\?", ".");
         
-        regexPattern.Append('$'); // 文字列の終了
-        return regexPattern.ToString();
+        // Add start and end anchors
+        return $"^{escapedPattern}$";
     }
 
     private bool ShouldIncludeFile(string filePath, IOptionContext options)
