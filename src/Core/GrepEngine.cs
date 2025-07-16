@@ -209,8 +209,8 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         
         // 開始アンカーを追加
         buffer[resultLength++] = '^';
-        
-        for (int i = 0; i < pattern.Length; i++)
+
+        for (int i = 0, len = pattern.Length; i < len; i++)
         {
             char c = pattern[i];
             
