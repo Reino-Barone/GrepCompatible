@@ -11,7 +11,9 @@ public class MatchStrategyFactory : IMatchStrategyFactory
     
     public MatchStrategyFactory()
     {
-        // デフォルトの戦略を登録
+        // SIMD対応の戦略を優先度順で登録
+        RegisterStrategy(new SimdBoyerMooreMatchStrategy());
+        RegisterStrategy(new SimdFixedStringMatchStrategy());
         RegisterStrategy(new FixedStringMatchStrategy());
         RegisterStrategy(new WholeWordMatchStrategy());
         RegisterStrategy(new RegexMatchStrategy());

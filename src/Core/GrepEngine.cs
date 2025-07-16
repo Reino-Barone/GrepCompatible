@@ -6,6 +6,11 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Buffers.Text;
@@ -548,49 +553,88 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             
             string? line;
             
+            // SIMD最適化のための準備
+            var isSimdCapable = Vector.IsHardwareAccelerated && pattern.Length <= 16;
+            
             // 条件分岐の最適化: 反転マッチと通常マッチで処理パスを分離
             if (invertMatch)
             {
-                // 反転マッチ専用の処理パス
-                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                // 反転マッチ専用の処理パス（SIMD最適化）
+                if (isSimdCapable)
                 {
-                    lineNumber++;
-                    cancellationToken.ThrowIfCancellationRequested();
-                    
-                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                    
-                    // 反転マッチの場合は存在確認のみ行う
-                    var hasMatches = !lineMatches.Any();
-                    if (hasMatches)
+                    while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                     {
-                        // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
-                        var lineMemory = line.AsMemory();
-                        rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
+                        lineNumber++;
+                        cancellationToken.ThrowIfCancellationRequested();
                         
-                        // 最大マッチ数の制限チェック（最適化）
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
-                            break;
+                        var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                        
+                        // 反転マッチの場合は存在確認のみ行う（SIMD最適化）
+                        var hasMatches = !HasAnyMatchesOptimized(line, pattern, options);
+                        if (hasMatches)
+                        {
+                            // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
+                            var lineMemory = line.AsMemory();
+                            rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
+                            
+                            // 最大マッチ数の制限チェック（最適化）
+                            if (hasMaxCountLimit && actualCount >= maxCountValue)
+                                break;
+                        }
+                    }
+                }
+                else
+                {
+                    // 従来の反転マッチ処理
+                    while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                    {
+                        lineNumber++;
+                        cancellationToken.ThrowIfCancellationRequested();
+                        
+                        var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                        
+                        // 反転マッチの場合は存在確認のみ行う
+                        var hasMatches = !lineMatches.Any();
+                        if (hasMatches)
+                        {
+                            // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
+                            var lineMemory = line.AsMemory();
+                            rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
+                            
+                            // 最大マッチ数の制限チェック（最適化）
+                            if (hasMaxCountLimit && actualCount >= maxCountValue)
+                                break;
+                        }
                     }
                 }
             }
             else
             {
-                // 通常マッチ専用の処理パス
-                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                // 通常マッチ専用の処理パス（バッチ処理最適化）
+                if (isSimdCapable)
                 {
-                    lineNumber++;
-                    cancellationToken.ThrowIfCancellationRequested();
-                    
-                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                    
-                    // 通常マッチの場合は実際のマッチを処理
-                    foreach (var match in lineMatches)
+                    await ProcessLinesInBatchesAsync(reader, strategy, pattern, options, filePath, 
+                        rentedArray, actualCount, lineNumber, hasMaxCountLimit, maxCountValue, cancellationToken);
+                }
+                else
+                {
+                    // 従来の通常マッチ処理
+                    while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                     {
-                        rentedArray[actualCount++] = match;
+                        lineNumber++;
+                        cancellationToken.ThrowIfCancellationRequested();
                         
-                        // 最大マッチ数の制限チェック（最適化）
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
-                            goto exitLoop;
+                        var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                        
+                        // 通常マッチの場合は実際のマッチを処理
+                        foreach (var match in lineMatches)
+                        {
+                            rentedArray[actualCount++] = match;
+                            
+                            // 最大マッチ数の制限チェック（最適化）
+                            if (hasMaxCountLimit && actualCount >= maxCountValue)
+                                goto exitLoop;
+                        }
                     }
                 }
             }
@@ -1018,5 +1062,241 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         {
             return new FileResult("(standard input)", [], 0, true, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// SIMD最適化されたマッチ存在確認
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool HasAnyMatchesOptimized(string line, string pattern, IOptionContext options)
+    {
+        if (string.IsNullOrEmpty(line) || string.IsNullOrEmpty(pattern))
+            return false;
+        
+        var ignoreCase = options.GetFlagValue(OptionNames.IgnoreCase);
+        
+        // 1文字の場合はSIMD最適化
+        if (pattern.Length == 1)
+        {
+            return HasSingleCharMatchSIMD(line, pattern[0], ignoreCase);
+        }
+        
+        // 短いパターンの場合はSIMD最適化
+        if (pattern.Length <= 16 && Vector.IsHardwareAccelerated)
+        {
+            return HasShortPatternMatchSIMD(line, pattern, ignoreCase);
+        }
+        
+        // フォールバック
+        var comparison = ignoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        return line.IndexOf(pattern, comparison) >= 0;
+    }
+    
+    /// <summary>
+    /// SIMD最適化された1文字マッチ存在確認
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool HasSingleCharMatchSIMD(string line, char pattern, bool ignoreCase)
+    {
+        if (Vector.IsHardwareAccelerated)
+        {
+            var searchChar = ignoreCase ? char.ToLowerInvariant(pattern) : pattern;
+            var searchVector = new Vector<ushort>((ushort)searchChar);
+            var vectorSize = Vector<ushort>.Count;
+            
+            for (int i = 0; i <= line.Length - vectorSize; i += vectorSize)
+            {
+                var chunk = new Vector<ushort>(MemoryMarshal.Cast<char, ushort>(line.AsSpan(i, vectorSize)));
+                if (ignoreCase)
+                {
+                    // 大文字小文字を無視する場合の近似チェック
+                    for (int j = 0; j < vectorSize && i + j < line.Length; j++)
+                    {
+                        if (char.ToLowerInvariant(line[i + j]) == searchChar)
+                            return true;
+                    }
+                }
+                else
+                {
+                    if (Vector.EqualsAny(chunk, searchVector))
+                        return true;
+                }
+            }
+            
+            // 残りの部分を処理
+            for (int i = (line.Length / vectorSize) * vectorSize; i < line.Length; i++)
+            {
+                if (ignoreCase ? 
+                    char.ToLowerInvariant(line[i]) == char.ToLowerInvariant(pattern) :
+                    line[i] == pattern)
+                    return true;
+            }
+        }
+        else
+        {
+            // フォールバック
+            for (int i = 0; i < line.Length; i++)
+            {
+                if (ignoreCase ? 
+                    char.ToLowerInvariant(line[i]) == char.ToLowerInvariant(pattern) :
+                    line[i] == pattern)
+                    return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /// <summary>
+    /// SIMD最適化された短いパターンマッチ存在確認
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool HasShortPatternMatchSIMD(string line, string pattern, bool ignoreCase)
+    {
+        if (line.Length < pattern.Length) return false;
+        
+        if (Vector.IsHardwareAccelerated)
+        {
+            var firstChar = ignoreCase ? char.ToLowerInvariant(pattern[0]) : pattern[0];
+            var firstCharVector = new Vector<ushort>((ushort)firstChar);
+            var vectorSize = Vector<ushort>.Count;
+            
+            for (int i = 0; i <= line.Length - pattern.Length; i += vectorSize)
+            {
+                var remainingLength = Math.Min(vectorSize, line.Length - i);
+                if (remainingLength < vectorSize)
+                {
+                    // 残りの部分を個別に処理
+                    for (int j = i; j <= line.Length - pattern.Length; j++)
+                    {
+                        if (IsPatternMatchOptimized(line, j, pattern, ignoreCase))
+                            return true;
+                    }
+                    break;
+                }
+                
+                var chunk = new Vector<ushort>(MemoryMarshal.Cast<char, ushort>(line.AsSpan(i, vectorSize)));
+                if (Vector.EqualsAny(chunk, firstCharVector))
+                {
+                    // 候補位置で完全なパターンマッチを確認
+                    for (int j = 0; j < vectorSize; j++)
+                    {
+                        var candidateIndex = i + j;
+                        if (candidateIndex <= line.Length - pattern.Length &&
+                            IsPatternMatchOptimized(line, candidateIndex, pattern, ignoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            // フォールバック
+            for (int i = 0; i <= line.Length - pattern.Length; i++)
+            {
+                if (IsPatternMatchOptimized(line, i, pattern, ignoreCase))
+                    return true;
+            }
+        }
+        
+        return false;
+    }
+    
+    /// <summary>
+    /// 最適化されたパターンマッチの確認
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsPatternMatchOptimized(string line, int startIndex, string pattern, bool ignoreCase)
+    {
+        if (startIndex + pattern.Length > line.Length) return false;
+        
+        if (ignoreCase)
+        {
+            for (int i = 0; i < pattern.Length; i++)
+            {
+                if (char.ToLowerInvariant(line[startIndex + i]) != char.ToLowerInvariant(pattern[i]))
+                    return false;
+            }
+        }
+        else
+        {
+            for (int i = 0; i < pattern.Length; i++)
+            {
+                if (line[startIndex + i] != pattern[i])
+                    return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    /// <summary>
+    /// バッチ処理での行処理（SIMD最適化）
+    /// </summary>
+    private async Task ProcessLinesInBatchesAsync(StreamReader reader, IMatchStrategy strategy, string pattern, 
+        IOptionContext options, string filePath, MatchResult[] rentedArray, int actualCount, int lineNumber, 
+        bool hasMaxCountLimit, int maxCountValue, CancellationToken cancellationToken)
+    {
+        const int batchSize = 64; // バッチサイズ
+        var lineBatch = new string[batchSize];
+        var batchCount = 0;
+        string? line;
+        
+        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        {
+            lineNumber++;
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            lineBatch[batchCount++] = line;
+            
+            // バッチが満杯になったか、最後の行の場合は処理
+            if (batchCount == batchSize || reader.EndOfStream)
+            {
+                // バッチを並列処理
+                var processingBatch = new string[batchCount];
+                Array.Copy(lineBatch, processingBatch, batchCount);
+                var batchMatches = ProcessLineBatchParallel(processingBatch, strategy, pattern, options, filePath, lineNumber - batchCount + 1);
+                
+                foreach (var match in batchMatches)
+                {
+                    if (actualCount >= rentedArray.Length) break;
+                    rentedArray[actualCount++] = match;
+                    
+                    if (hasMaxCountLimit && actualCount >= maxCountValue)
+                        return;
+                }
+                
+                batchCount = 0;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// 行バッチの並列処理
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static IEnumerable<MatchResult> ProcessLineBatchParallel(string[] lineBatch, IMatchStrategy strategy, 
+        string pattern, IOptionContext options, string filePath, int startLineNumber)
+    {
+        var matches = new List<MatchResult>();
+        
+        // 並列処理でバッチを処理
+        Parallel.For(0, lineBatch.Length, i =>
+        {
+            var line = lineBatch[i];
+            if (line == null) return;
+            
+            var lineNumber = startLineNumber + i;
+            var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+            
+            lock (matches)
+            {
+                matches.AddRange(lineMatches);
+            }
+        });
+        
+        return matches;
     }
 }
