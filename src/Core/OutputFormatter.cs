@@ -69,11 +69,11 @@ public class PosixOutputFormatter : IOutputFormatter
     private async Task FormatCountOnlyAsync(SearchResult result, IOptionContext options, TextWriter writer)
     {
         // オプション値をキャッシュ
-        var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
         var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
-        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
+        var successfulResults = result.SuccessfulResults.ToList();
+        var shouldShowFilename = !suppressFilename && (successfulResults.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
         
-        foreach (var fileResult in result.SuccessfulResults)
+        foreach (var fileResult in successfulResults)
         {
             if (shouldShowFilename)
             {
@@ -103,9 +103,9 @@ public class PosixOutputFormatter : IOutputFormatter
     private async Task FormatNormalOutputAsync(SearchResult result, IOptionContext options, TextWriter writer)
     {
         // オプション値を一度だけ取得してキャッシュ
-        var files = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new[] { "-" }.ToList().AsReadOnly();
         var suppressFilename = options.GetFlagValue(OptionNames.SuppressFilename);
-        var shouldShowFilename = !suppressFilename && (files.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
+        var successfulResults = result.SuccessfulResults.ToList();
+        var shouldShowFilename = !suppressFilename && (successfulResults.Count > 1 || options.GetFlagValue(OptionNames.FilenameOnly));
         var showLineNumber = options.GetFlagValue(OptionNames.LineNumber);
         var contextBefore = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextBefore) ?? 0;
         var contextAfter = options.GetIntValue(OptionNames.Context) ?? options.GetIntValue(OptionNames.ContextAfter) ?? 0;
@@ -114,7 +114,7 @@ public class PosixOutputFormatter : IOutputFormatter
         var formatOptions = new FormatOptions(shouldShowFilename, showLineNumber, contextBefore, contextAfter);
         
         // LINQ最適化: 一度の反復で処理
-        foreach (var fileResult in result.SuccessfulResults)
+        foreach (var fileResult in successfulResults)
         {
             if (fileResult.HasMatches)
             {
