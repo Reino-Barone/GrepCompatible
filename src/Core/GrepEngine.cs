@@ -422,22 +422,47 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     /// <returns>パターンのリスト</returns>
     private static List<string> GetPatterns(IOptionContext options, OptionNames optionName)
     {
-        var patterns = new List<string>();
+        var patterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        
+        // 後方互換性のため、まず単一の値を取得
+        var singleValue = options.GetStringValue(optionName);
+        if (!string.IsNullOrEmpty(singleValue))
+        {
+            // 単一値内でのコンマ・セミコロン区切りもサポート
+            var splitPatterns = singleValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+            foreach (var pattern in splitPatterns)
+            {
+                var trimmedPattern = pattern.Trim();
+                if (!string.IsNullOrEmpty(trimmedPattern))
+                {
+                    patterns.Add(trimmedPattern);
+                }
+            }
+        }
         
         // 複数の同名オプションの値を全て取得
         var allOptionValues = options.GetAllStringValues(optionName);
-        
-        foreach (var optionValue in allOptionValues)
+        if (allOptionValues != null)
         {
-            if (string.IsNullOrEmpty(optionValue))
-                continue;
-            
-            // 各オプション値内でのコンマ・セミコロン区切りもサポート
-            var splitPatterns = optionValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
-            patterns.AddRange(splitPatterns.Select(p => p.Trim()).Where(p => !string.IsNullOrEmpty(p)));
+            foreach (var optionValue in allOptionValues)
+            {
+                if (string.IsNullOrEmpty(optionValue))
+                    continue;
+                
+                // 各オプション値内でのコンマ・セミコロン区切りもサポート
+                var splitPatterns = optionValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+                foreach (var pattern in splitPatterns)
+                {
+                    var trimmedPattern = pattern.Trim();
+                    if (!string.IsNullOrEmpty(trimmedPattern))
+                    {
+                        patterns.Add(trimmedPattern);
+                    }
+                }
+            }
         }
         
-        return patterns;
+        return [.. patterns];
     }
 
     private async Task<FileResult> ProcessFileAsync(string filePath, IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
