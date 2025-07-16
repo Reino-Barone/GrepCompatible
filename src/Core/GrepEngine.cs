@@ -467,7 +467,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         if (!string.IsNullOrEmpty(singleValue))
         {
             // 単一値内でのコンマ・セミコロン区切りもサポート
-            var splitPatterns = singleValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+            var splitPatterns = singleValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (var pattern in splitPatterns)
             {
                 var trimmedPattern = pattern.Trim();
@@ -488,7 +488,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                     continue;
                 
                 // 各オプション値内でのコンマ・セミコロン区切りもサポート
-                var splitPatterns = optionValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+                var splitPatterns = optionValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (var pattern in splitPatterns)
                 {
                     var trimmedPattern = pattern.Trim();
@@ -553,88 +553,49 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             
             string? line;
             
-            // SIMD最適化のための準備
-            var isSimdCapable = Vector.IsHardwareAccelerated && pattern.Length <= 16;
-            
             // 条件分岐の最適化: 反転マッチと通常マッチで処理パスを分離
             if (invertMatch)
             {
-                // 反転マッチ専用の処理パス（SIMD最適化）
-                if (isSimdCapable)
+                // 反転マッチ専用の処理パス
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
-                    while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                    lineNumber++;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                    
+                    // 反転マッチの場合は存在確認のみ行う（戦略パターン使用）
+                    var hasMatches = !lineMatches.Any();
+                    if (hasMatches)
                     {
-                        lineNumber++;
-                        cancellationToken.ThrowIfCancellationRequested();
+                        // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
+                        var lineMemory = line.AsMemory();
+                        rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
                         
-                        var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                        
-                        // 反転マッチの場合は存在確認のみ行う（SIMD最適化）
-                        var hasMatches = !HasAnyMatchesOptimized(line, pattern, options);
-                        if (hasMatches)
-                        {
-                            // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
-                            var lineMemory = line.AsMemory();
-                            rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
-                            
-                            // 最大マッチ数の制限チェック（最適化）
-                            if (hasMaxCountLimit && actualCount >= maxCountValue)
-                                break;
-                        }
-                    }
-                }
-                else
-                {
-                    // 従来の反転マッチ処理
-                    while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-                    {
-                        lineNumber++;
-                        cancellationToken.ThrowIfCancellationRequested();
-                        
-                        var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                        
-                        // 反転マッチの場合は存在確認のみ行う
-                        var hasMatches = !lineMatches.Any();
-                        if (hasMatches)
-                        {
-                            // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
-                            var lineMemory = line.AsMemory();
-                            rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
-                            
-                            // 最大マッチ数の制限チェック（最適化）
-                            if (hasMaxCountLimit && actualCount >= maxCountValue)
-                                break;
-                        }
+                        // 最大マッチ数の制限チェック（最適化）
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            break;
                     }
                 }
             }
             else
             {
-                // 通常マッチ専用の処理パス（バッチ処理最適化）
-                if (isSimdCapable)
+                // 通常マッチ専用の処理パス（戦略パターン使用）
+                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
-                    await ProcessLinesInBatchesAsync(reader, strategy, pattern, options, filePath, 
-                        rentedArray, actualCount, lineNumber, hasMaxCountLimit, maxCountValue, cancellationToken);
-                }
-                else
-                {
-                    // 従来の通常マッチ処理
-                    while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                    lineNumber++;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                    
+                    // 通常マッチの場合は実際のマッチを処理
+                    foreach (var match in lineMatches)
                     {
-                        lineNumber++;
-                        cancellationToken.ThrowIfCancellationRequested();
+                        rentedArray[actualCount++] = match;
                         
-                        var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                        
-                        // 通常マッチの場合は実際のマッチを処理
-                        foreach (var match in lineMatches)
-                        {
-                            rentedArray[actualCount++] = match;
-                            
-                            // 最大マッチ数の制限チェック（最適化）
-                            if (hasMaxCountLimit && actualCount >= maxCountValue)
-                                goto exitLoop;
-                        }
+                        // 最大マッチ数の制限チェック（最適化）
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            goto exitLoop;
                     }
                 }
             }
