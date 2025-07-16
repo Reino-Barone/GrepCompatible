@@ -1,5 +1,6 @@
 using System.Text;
 using GrepCompatible.Abstractions;
+using System.Runtime.CompilerServices;
 
 namespace GrepCompatible.Test.Infrastructure;
 
@@ -209,6 +210,72 @@ public class MockFileSystem : IFileSystem
         var content = _standardInputContent ?? "";
         var stream = new MemoryStream(Encoding.UTF8.GetBytes(content));
         return new StreamReader(stream, Encoding.UTF8);
+    }
+
+    public async IAsyncEnumerable<ReadOnlyMemory<char>> ReadLinesAsMemoryAsync(string path, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var normalizedPath = NormalizePath(path);
+        if (!_files.TryGetValue(normalizedPath, out var fileInfo))
+            throw new FileNotFoundException($"File not found: {path}");
+        
+        using var reader = new StringReader(fileInfo.Content);
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return line.AsMemory();
+        }
+    }
+
+    public async IAsyncEnumerable<string> ReadLinesAsync(string path, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var normalizedPath = NormalizePath(path);
+        if (!_files.TryGetValue(normalizedPath, out var fileInfo))
+            throw new FileNotFoundException($"File not found: {path}");
+        
+        using var reader = new StringReader(fileInfo.Content);
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return line;
+        }
+    }
+
+    public async IAsyncEnumerable<ReadOnlyMemory<char>> ReadStandardInputAsMemoryAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var content = _standardInputContent ?? "";
+        using var reader = new StringReader(content);
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return line.AsMemory();
+        }
+    }
+
+    public async IAsyncEnumerable<string> ReadStandardInputAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var content = _standardInputContent ?? "";
+        using var reader = new StringReader(content);
+        string? line;
+        while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return line;
+        }
+    }
+
+    public async IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, SearchOption searchOption, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        await Task.Yield(); // 非同期コンテキストに切り替え
+        
+        var files = EnumerateFiles(path, searchPattern, searchOption);
+        foreach (var file in files)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return file;
+        }
     }
 }
 

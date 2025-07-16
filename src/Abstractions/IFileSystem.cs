@@ -63,6 +63,46 @@ public interface IFileSystem
     /// </summary>
     /// <returns>標準入力のStreamReader</returns>
     StreamReader GetStandardInput();
+
+    /// <summary>
+    /// ファイルから行を非同期で読み込む（ReadOnlyMemoryを使用したゼロコピー処理）
+    /// </summary>
+    /// <param name="path">ファイルパス</param>
+    /// <param name="cancellationToken">キャンセレーショントークン</param>
+    /// <returns>行のReadOnlyMemoryを非同期で返すIAsyncEnumerable</returns>
+    IAsyncEnumerable<ReadOnlyMemory<char>> ReadLinesAsMemoryAsync(string path, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// ファイルから行を非同期で読み込む（文字列として）
+    /// </summary>
+    /// <param name="path">ファイルパス</param>
+    /// <param name="cancellationToken">キャンセレーショントークン</param>
+    /// <returns>行を非同期で返すIAsyncEnumerable</returns>
+    IAsyncEnumerable<string> ReadLinesAsync(string path, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 標準入力から行を非同期で読み込む（ReadOnlyMemoryを使用したゼロコピー処理）
+    /// </summary>
+    /// <param name="cancellationToken">キャンセレーショントークン</param>
+    /// <returns>行のReadOnlyMemoryを非同期で返すIAsyncEnumerable</returns>
+    IAsyncEnumerable<ReadOnlyMemory<char>> ReadStandardInputAsMemoryAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// 標準入力から行を非同期で読み込む（文字列として）
+    /// </summary>
+    /// <param name="cancellationToken">キャンセレーショントークン</param>
+    /// <returns>行を非同期で返すIAsyncEnumerable</returns>
+    IAsyncEnumerable<string> ReadStandardInputAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// ディレクトリ内のファイルを非同期で列挙
+    /// </summary>
+    /// <param name="path">ディレクトリパス</param>
+    /// <param name="searchPattern">検索パターン</param>
+    /// <param name="searchOption">検索オプション</param>
+    /// <param name="cancellationToken">キャンセレーショントークン</param>
+    /// <returns>ファイルパスを非同期で返すIAsyncEnumerable</returns>
+    IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, SearchOption searchOption, CancellationToken cancellationToken = default);
 }
 
 /// <summary>

@@ -1019,4 +1019,129 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             return new FileResult("(standard input)", [], 0, true, ex.Message);
         }
     }
+
+    /// <summary>
+    /// IAsyncEnumerableを使用したストリーミング処理
+    /// </summary>
+    private async Task<FileResult> ProcessFileStreamingAsync(string filePath, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
+    {
+        var estimatedSize = maxCount ?? 1000;
+        var rentedArray = _matchPool.Rent(estimatedSize);
+        var actualCount = 0;
+        var hasMaxCountLimit = maxCount.HasValue;
+        var maxCountValue = maxCount ?? int.MaxValue;
+        
+        try
+        {
+            var lineNumber = 0;
+            
+            // IAsyncEnumerableを使用してReadOnlyMemoryでゼロコピー処理
+            await foreach (var lineMemory in _fileSystem.ReadLinesAsMemoryAsync(filePath, cancellationToken))
+            {
+                lineNumber++;
+                cancellationToken.ThrowIfCancellationRequested();
+                
+                var line = lineMemory.ToString(); // 必要時のみ文字列に変換
+                var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                
+                if (invertMatch)
+                {
+                    if (!lineMatches.Any())
+                    {
+                        rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, lineMemory.Length);
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            break;
+                    }
+                }
+                else
+                {
+                    foreach (var match in lineMatches)
+                    {
+                        rentedArray[actualCount++] = match;
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            goto exitLoop;
+                    }
+                }
+            }
+            
+            exitLoop:
+            
+            var results = new MatchResult[actualCount];
+            Array.Copy(rentedArray, results, actualCount);
+            
+            return new FileResult(filePath, results.AsReadOnly(), actualCount);
+        }
+        catch (Exception ex)
+        {
+            return new FileResult(filePath, [], 0, true, ex.Message);
+        }
+        finally
+        {
+            _matchPool.Return(rentedArray, clearArray: true);
+        }
+    }
+
+    /// <summary>
+    /// 標準入力のストリーミング処理
+    /// </summary>
+    private async Task<FileResult> ProcessStandardInputStreamingAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
+    {
+        var estimatedSize = maxCount ?? 1000;
+        var rentedArray = _matchPool.Rent(estimatedSize);
+        var actualCount = 0;
+        var lineNumber = 0;
+        var hasMaxCountLimit = maxCount.HasValue;
+        var maxCountValue = maxCount ?? int.MaxValue;
+        const string fileName = "(standard input)";
+        
+        try
+        {
+            await foreach (var lineMemory in _fileSystem.ReadStandardInputAsMemoryAsync(cancellationToken))
+            {
+                lineNumber++;
+                cancellationToken.ThrowIfCancellationRequested();
+                
+                var line = lineMemory.ToString();
+                var lineMatches = strategy.FindMatches(line, pattern, options, fileName, lineNumber);
+                
+                if (invertMatch)
+                {
+                    if (!lineMatches.Any())
+                    {
+                        rentedArray[actualCount++] = new MatchResult(fileName, lineNumber, line, lineMemory, 0, lineMemory.Length);
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            break;
+                    }
+                }
+                else
+                {
+                    foreach (var match in lineMatches)
+                    {
+                        rentedArray[actualCount++] = match;
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            goto exitLoop;
+                    }
+                }
+            }
+            
+            exitLoop:
+            
+            var results = new MatchResult[actualCount];
+            Array.Copy(rentedArray, results, actualCount);
+            
+            return new FileResult(fileName, results.AsReadOnly(), actualCount);
+        }
+        catch (Exception ex)
+        {
+            return new FileResult(fileName, [], 0, true, ex.Message);
+        }
+        finally
+        {
+            _matchPool.Return(rentedArray, clearArray: true);
+        }
+    }
 }
