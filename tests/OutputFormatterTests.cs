@@ -402,4 +402,55 @@ public class OutputFormatterTests
                 .Returns(new[] { "test1.txt", "test2.txt" }.ToList().AsReadOnly());
         }
     }
+
+    [Fact]
+    public async Task FormatOutputAsync_RecursiveSearch_MultipleFiles_ShouldShowFilenames()
+    {
+        // Arrange: Simulate recursive search with single directory argument but multiple files found
+        var mockOptions = new Mock<IOptionContext>();
+        var writer = new StringWriter();
+        
+        // Setup options to simulate recursive search with single directory argument
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SilentMode)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.CountOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.FilenameOnly)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.SuppressFilename)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.LineNumber)).Returns(false);
+        mockOptions.Setup(o => o.GetFlagValue(OptionNames.RecursiveSearch)).Returns(true);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.Context)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextBefore)).Returns((int?)null);
+        mockOptions.Setup(o => o.GetIntValue(OptionNames.ContextAfter)).Returns((int?)null);
+        
+        // This simulates the original command line arguments: just the directory
+        mockOptions.Setup(o => o.GetStringListArgumentValue(ArgumentNames.Files))
+            .Returns(new[] { "/path/to/directory" }.ToList().AsReadOnly());
+        
+        // Create multiple file results (what actually gets searched)
+        var matches1 = new List<MatchResult>
+        {
+            new("/path/to/directory/file1.txt", 1, "hello world", "hello".AsMemory(), 0, 5)
+        };
+        var matches2 = new List<MatchResult>
+        {
+            new("/path/to/directory/file2.txt", 1, "hello again", "hello".AsMemory(), 0, 5)
+        };
+        
+        var fileResult1 = new FileResult("/path/to/directory/file1.txt", matches1, 1);
+        var fileResult2 = new FileResult("/path/to/directory/file2.txt", matches2, 1);
+        var searchResult = new SearchResult(new[] { fileResult1, fileResult2 }, 2, 2, TimeSpan.FromMilliseconds(100));
+
+        // Act
+        var exitCode = await _formatter.FormatOutputAsync(searchResult, mockOptions.Object, writer);
+
+        // Assert
+        Assert.Equal(0, exitCode);
+        var output = writer.ToString();
+        var lines = output.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(2, lines.Length);
+        
+        // With the current bug, filenames won't be shown because files.Count = 1
+        // But we EXPECT them to be shown because we're searching multiple files
+        Assert.Contains(lines, line => line == "/path/to/directory/file1.txt:hello world");
+        Assert.Contains(lines, line => line == "/path/to/directory/file2.txt:hello again");
+    }
 }
