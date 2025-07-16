@@ -6,6 +6,11 @@ using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Buffers.Text;
@@ -462,7 +467,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         if (!string.IsNullOrEmpty(singleValue))
         {
             // 単一値内でのコンマ・セミコロン区切りもサポート
-            var splitPatterns = singleValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+            var splitPatterns = singleValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (var pattern in splitPatterns)
             {
                 var trimmedPattern = pattern.Trim();
@@ -483,7 +488,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                     continue;
                 
                 // 各オプション値内でのコンマ・セミコロン区切りもサポート
-                var splitPatterns = optionValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+                var splitPatterns = optionValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (var pattern in splitPatterns)
                 {
                     var trimmedPattern = pattern.Trim();
@@ -559,7 +564,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                     
                     var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
                     
-                    // 反転マッチの場合は存在確認のみ行う
+                    // 反転マッチの場合は存在確認のみ行う（戦略パターン使用）
                     var hasMatches = !lineMatches.Any();
                     if (hasMatches)
                     {
@@ -575,7 +580,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             }
             else
             {
-                // 通常マッチ専用の処理パス
+                // 通常マッチ専用の処理パス（戦略パターン使用）
                 while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
                 {
                     lineNumber++;
