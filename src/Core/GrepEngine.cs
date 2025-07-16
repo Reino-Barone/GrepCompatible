@@ -182,18 +182,89 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         return 16384;
     }
 
+    /// <summary>
+    /// globパターンを正規表現パターンに変換する
+    /// </summary>
+    /// <param name="globPattern">globパターン（例: *.cs, test?.txt）</param>
+    /// <returns>正規表現パターン</returns>
+    private static string ConvertGlobToRegex(string globPattern)
+    {
+        if (string.IsNullOrEmpty(globPattern))
+            return string.Empty;
+        
+        var regexPattern = new StringBuilder();
+        regexPattern.Append('^'); // 文字列の開始
+        
+        for (int i = 0; i < globPattern.Length; i++)
+        {
+            char c = globPattern[i];
+            switch (c)
+            {
+                case '*':
+                    regexPattern.Append(".*"); // 任意の文字の0回以上の繰り返し
+                    break;
+                case '?':
+                    regexPattern.Append('.'); // 任意の1文字
+                    break;
+                case '.':
+                    regexPattern.Append(@"\."); // リテラルドット
+                    break;
+                case '\\':
+                    regexPattern.Append(@"\\"); // リテラルバックスラッシュ
+                    break;
+                case '^':
+                    regexPattern.Append(@"\^"); // リテラルハット
+                    break;
+                case '$':
+                    regexPattern.Append(@"\$"); // リテラルドル
+                    break;
+                case '(':
+                    regexPattern.Append(@"\("); // リテラル開き括弧
+                    break;
+                case ')':
+                    regexPattern.Append(@"\)"); // リテラル閉じ括弧
+                    break;
+                case '[':
+                    regexPattern.Append(@"\["); // リテラル開き角括弧
+                    break;
+                case ']':
+                    regexPattern.Append(@"\]"); // リテラル閉じ角括弧
+                    break;
+                case '{':
+                    regexPattern.Append(@"\{"); // リテラル開き波括弧
+                    break;
+                case '}':
+                    regexPattern.Append(@"\}"); // リテラル閉じ波括弧
+                    break;
+                case '|':
+                    regexPattern.Append(@"\|"); // リテラルパイプ
+                    break;
+                case '+':
+                    regexPattern.Append(@"\+"); // リテラルプラス
+                    break;
+                default:
+                    regexPattern.Append(c); // その他の文字はそのまま
+                    break;
+            }
+        }
+        
+        regexPattern.Append('$'); // 文字列の終了
+        return regexPattern.ToString();
+    }
+
     private bool ShouldIncludeFile(string filePath, IOptionContext options)
     {
         var fileName = _pathHelper.GetFileName(filePath);
         
-        // 除外パターンのチェック（StringComparison最適化）
+        // 除外パターンのチェック（globパターン対応）
         var excludePattern = options.GetStringValue(OptionNames.ExcludePattern);
         if (!string.IsNullOrEmpty(excludePattern))
         {
-            // 単純な文字列比較であればRegexよりも高速
+            // globパターンかどうかをチェック
             if (excludePattern.Contains('*') || excludePattern.Contains('?'))
             {
-                if (Regex.IsMatch(fileName, excludePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                var regexPattern = ConvertGlobToRegex(excludePattern);
+                if (Regex.IsMatch(fileName, regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
                     return false;
             }
             else
@@ -204,14 +275,15 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             }
         }
         
-        // 包含パターンのチェック（StringComparison最適化）
+        // 包含パターンのチェック（globパターン対応）
         var includePattern = options.GetStringValue(OptionNames.IncludePattern);
         if (!string.IsNullOrEmpty(includePattern))
         {
-            // 単純な文字列比較であればRegexよりも高速
+            // globパターンかどうかをチェック
             if (includePattern.Contains('*') || includePattern.Contains('?'))
             {
-                if (!Regex.IsMatch(fileName, includePattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
+                var regexPattern = ConvertGlobToRegex(includePattern);
+                if (!Regex.IsMatch(fileName, regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled))
                     return false;
             }
             else
