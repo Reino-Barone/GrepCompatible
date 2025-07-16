@@ -527,6 +527,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             return await ProcessFileWithOptimizedContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken);
         }
         
+        // 通常の処理（IAsyncEnumerableを使用したストリーミング）
+        return await ProcessFileStreamingAsync(filePath, strategy, options, pattern, invertMatch, maxCount, cancellationToken);
+        
         // ArrayPoolを使用してメモリ効率を向上
         var estimatedSize = maxCount ?? 1000;
         var rentedArray = _matchPool.Rent(estimatedSize);
