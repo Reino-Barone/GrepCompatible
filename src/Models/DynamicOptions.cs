@@ -93,4 +93,17 @@ public class DynamicOptions : IOptionContext
     {
         return GetArgument<StringListArgument>(argumentName)?.Value;
     }
+
+    /// <summary>
+    /// 指定された名前のオプションの全ての値を取得（複数指定対応）
+    /// </summary>
+    public IReadOnlyList<string> GetAllStringValues(OptionNames optionName)
+    {
+        return _options.OfType<StringOption>()
+            .Where(o => o.Name == optionName)
+            .Select(o => o.Value)
+            .Where(v => !string.IsNullOrEmpty(v))
+            .ToList()
+            .AsReadOnly();
+    }
 }

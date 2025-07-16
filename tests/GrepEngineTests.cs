@@ -341,7 +341,7 @@ public class GrepEngineTests : IDisposable
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
         mockOptions.Setup(o => o.GetFlagValue(OptionNames.RecursiveSearch)).Returns(true);
-        mockOptions.Setup(o => o.GetStringValue(OptionNames.ExcludePattern)).Returns("test.log");
+        mockOptions.Setup(o => o.GetStringValue(OptionNames.ExcludePattern)).Returns("*.log");
 
         _mockStrategy.Setup(s => s.FindMatches("hello world", "hello", mockOptions.Object, tempFile1, 1))
             .Returns(new[] { new MatchResult(tempFile1, 1, "hello world", "hello".AsMemory(), 0, 5) });
@@ -371,7 +371,7 @@ public class GrepEngineTests : IDisposable
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
         mockOptions.Setup(o => o.GetFlagValue(OptionNames.RecursiveSearch)).Returns(true);
-        mockOptions.Setup(o => o.GetStringValue(OptionNames.IncludePattern)).Returns("test.txt");
+        mockOptions.Setup(o => o.GetStringValue(OptionNames.IncludePattern)).Returns("*.txt");
 
         _mockStrategy.Setup(s => s.FindMatches("hello world", "hello", mockOptions.Object, tempFile1, 1))
             .Returns(new[] { new MatchResult(tempFile1, 1, "hello world", "hello".AsMemory(), 0, 5) });

@@ -63,4 +63,9 @@ public interface IOptionContext
     /// 文字列リスト引数の値を取得
     /// </summary>
     IReadOnlyList<string>? GetStringListArgumentValue(ArgumentNames argumentName);
+
+    /// <summary>
+    /// 指定された名前のオプションの全ての値を取得（複数指定対応）
+    /// </summary>
+    IReadOnlyList<string> GetAllStringValues(OptionNames optionName);
 }
