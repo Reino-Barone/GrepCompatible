@@ -1,4 +1,5 @@
 using GrepCompatible.Constants;
+using GrepCompatible.Core;
 using GrepCompatible.Models;
 using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
@@ -21,28 +22,22 @@ public class FixedStringMatchStrategy : IMatchStrategy
         // オプション値を一度だけ取得してキャッシュ
         var comparison = options.GetFlagValue(OptionNames.IgnoreCase) ? 
             StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        var currentIndex = 0;
-        var patternLength = pattern.Length;
-        var lineLength = line.Length;
         
-        while (currentIndex < lineLength)
+        // SIMD最適化を使用してすべてのマッチを取得
+        var matchIndices = SimdStringSearch.FindAllMatches(line.AsSpan(), pattern.AsSpan(), comparison);
+        
+        foreach (var matchIndex in matchIndices)
         {
-            var foundIndex = line.IndexOf(pattern, currentIndex, comparison);
-            if (foundIndex == -1)
-                break;
-                
-            var matchedText = line.AsMemory(foundIndex, patternLength);
+            var matchedText = line.AsMemory(matchIndex, pattern.Length);
             
             yield return new MatchResult(
                 fileName,
                 lineNumber,
                 line,
                 matchedText,
-                foundIndex,
-                foundIndex + patternLength
+                matchIndex,
+                matchIndex + pattern.Length
             );
-            
-            currentIndex = foundIndex + 1;
         }
     }
 }
