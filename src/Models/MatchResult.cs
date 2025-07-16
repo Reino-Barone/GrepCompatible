@@ -24,6 +24,25 @@ public record MatchResult(
 }
 
 /// <summary>
+/// コンテキスト行を表現するレコード
+/// </summary>
+public record ContextLine(
+    string FileName,
+    int LineNumber,
+    string Line,
+    bool IsMatch
+);
+
+/// <summary>
+/// コンテキスト付きマッチ結果を表現するレコード
+/// </summary>
+public record ContextualMatchResult(
+    MatchResult Match,
+    IReadOnlyList<ContextLine> BeforeContext,
+    IReadOnlyList<ContextLine> AfterContext
+);
+
+/// <summary>
 /// ファイル処理結果を表現するレコード
 /// </summary>
 public record FileResult(
@@ -31,7 +50,8 @@ public record FileResult(
     IReadOnlyList<MatchResult> Matches,
     int TotalMatches,
     bool HasError = false,
-    string? ErrorMessage = null
+    string? ErrorMessage = null,
+    IReadOnlyList<ContextualMatchResult>? ContextualMatches = null
 )
 {
     /// <summary>
@@ -43,6 +63,11 @@ public record FileResult(
     /// 成功したかどうか
     /// </summary>
     public bool IsSuccess => !HasError;
+    
+    /// <summary>
+    /// コンテキスト情報が利用可能かどうか
+    /// </summary>
+    public bool HasContextualMatches => ContextualMatches != null && ContextualMatches.Count > 0;
 }
 
 /// <summary>

@@ -135,55 +135,91 @@ public class PosixOutputFormatter : IOutputFormatter
         }
         else
         {
-            // コンテキストありの場合: ArrayPoolを使用してメモリ効率を向上
-            var currentLineNumber = -1;
-            var rentedArray = ArrayPool<MatchResult>.Shared.Rent(32); // 初期サイズ32
-            var currentGroupCount = 0;
-            
-            try
+            // コンテキストありの場合: ContextualMatchesを使用
+            if (fileResult.HasContextualMatches)
             {
+                await FormatContextualMatchesAsync(fileResult.ContextualMatches!, formatOptions, writer);
+            }
+            else
+            {
+                // フォールバック: 通常の処理
                 foreach (var match in fileResult.Matches)
                 {
-                    if (match.LineNumber != currentLineNumber)
-                    {
-                        // 前のグループを処理
-                        if (currentGroupCount > 0)
-                        {
-                            for (int i = 0; i < currentGroupCount; i++)
-                            {
-                                await FormatMatchAsync(rentedArray[i], formatOptions, writer);
-                            }
-                            currentGroupCount = 0;
-                        }
-                        
-                        currentLineNumber = match.LineNumber;
-                    }
-                    
-                    // 配列サイズが不足する場合は拡張
-                    if (currentGroupCount >= rentedArray.Length)
-                    {
-                        var newArray = ArrayPool<MatchResult>.Shared.Rent(rentedArray.Length * 2);
-                        Array.Copy(rentedArray, newArray, currentGroupCount);
-                        ArrayPool<MatchResult>.Shared.Return(rentedArray);
-                        rentedArray = newArray;
-                    }
-                    
-                    rentedArray[currentGroupCount++] = match;
-                }
-                
-                // 最後のグループを処理
-                if (currentGroupCount > 0)
-                {
-                    for (int i = 0; i < currentGroupCount; i++)
-                    {
-                        await FormatMatchAsync(rentedArray[i], formatOptions, writer);
-                    }
+                    await FormatMatchAsync(match, formatOptions, writer);
                 }
             }
-            finally
+        }
+    }
+
+    private async Task FormatContextualMatchesAsync(IReadOnlyList<ContextualMatchResult> contextualMatches, FormatOptions formatOptions, TextWriter writer)
+    {
+        var processedLines = new HashSet<int>();
+        var lastProcessedLine = 0;
+        
+        foreach (var contextualMatch in contextualMatches)
+        {
+            var match = contextualMatch.Match;
+            
+            // 重複する行の処理を避けるために、前回処理した行より後の行のみを処理
+            var startLineNumber = Math.Max(lastProcessedLine + 1, 
+                contextualMatch.BeforeContext.FirstOrDefault()?.LineNumber ?? match.LineNumber);
+            
+            // Before context
+            foreach (var contextLine in contextualMatch.BeforeContext)
             {
-                ArrayPool<MatchResult>.Shared.Return(rentedArray);
+                if (contextLine.LineNumber >= startLineNumber && !processedLines.Contains(contextLine.LineNumber))
+                {
+                    await FormatContextLineAsync(contextLine, formatOptions, writer);
+                    processedLines.Add(contextLine.LineNumber);
+                }
             }
+            
+            // Match line
+            if (!processedLines.Contains(match.LineNumber))
+            {
+                await FormatMatchAsync(match, formatOptions, writer);
+                processedLines.Add(match.LineNumber);
+            }
+            
+            // After context
+            foreach (var contextLine in contextualMatch.AfterContext)
+            {
+                if (!processedLines.Contains(contextLine.LineNumber))
+                {
+                    await FormatContextLineAsync(contextLine, formatOptions, writer);
+                    processedLines.Add(contextLine.LineNumber);
+                }
+            }
+            
+            lastProcessedLine = Math.Max(lastProcessedLine, 
+                contextualMatch.AfterContext.LastOrDefault()?.LineNumber ?? match.LineNumber);
+            
+            // コンテキストグループの区切り線を追加（複数のマッチがある場合）
+            if (contextualMatch != contextualMatches.Last())
+            {
+                await writer.WriteLineAsync("--");
+            }
+        }
+    }
+
+    private async Task FormatContextLineAsync(ContextLine contextLine, FormatOptions formatOptions, TextWriter writer)
+    {
+        // コンテキスト行のフォーマット（マッチ行と同じ形式だが、":"の代わりに"-"を付ける）
+        if (formatOptions.ShouldShowFilename && formatOptions.ShowLineNumber)
+        {
+            await writer.WriteLineAsync($"{contextLine.FileName}-{contextLine.LineNumber}-{contextLine.Line}");
+        }
+        else if (formatOptions.ShouldShowFilename)
+        {
+            await writer.WriteLineAsync($"{contextLine.FileName}-{contextLine.Line}");
+        }
+        else if (formatOptions.ShowLineNumber)
+        {
+            await writer.WriteLineAsync($"{contextLine.LineNumber}-{contextLine.Line}");
+        }
+        else
+        {
+            await writer.WriteLineAsync(contextLine.Line);
         }
     }
 
