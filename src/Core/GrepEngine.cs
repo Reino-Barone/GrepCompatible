@@ -462,7 +462,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         if (!string.IsNullOrEmpty(singleValue))
         {
             // 単一値内でのコンマ・セミコロン区切りもサポート
-            var splitPatterns = singleValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+            var splitPatterns = singleValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (var pattern in splitPatterns)
             {
                 var trimmedPattern = pattern.Trim();
@@ -483,7 +483,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                     continue;
                 
                 // 各オプション値内でのコンマ・セミコロン区切りもサポート
-                var splitPatterns = optionValue.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries);
+                var splitPatterns = optionValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
                 foreach (var pattern in splitPatterns)
                 {
                     var trimmedPattern = pattern.Trim();
