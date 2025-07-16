@@ -256,9 +256,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                 // バッファが足りない場合は従来の方法にフォールバック
                 var sb = new StringBuilder();
                 sb.Append('^');
-                foreach (char c in globPattern)
+                foreach (char _c in globPattern)
                 {
-                    switch (c)
+                    switch (_c)
                     {
                         case '*':
                             sb.Append(".*");
@@ -278,10 +278,10 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                         case '|':
                         case '\\':
                         case '+':
-                            sb.Append('\\').Append(c);
+                            sb.Append('\\').Append(_c);
                             break;
                         default:
-                            sb.Append(c);
+                            sb.Append(_c);
                             break;
                     }
                 }
