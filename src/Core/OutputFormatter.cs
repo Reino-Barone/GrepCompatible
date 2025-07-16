@@ -50,19 +50,19 @@ public class PosixOutputFormatter : IOutputFormatter
         // カウントのみモード
         if (options.GetFlagValue(OptionNames.CountOnly))
         {
-            await FormatCountOnlyAsync(result, options, writer);
+            await FormatCountOnlyAsync(result, options, writer).ConfigureAwait(false);
             return hasMatches ? 0 : 1;
         }
         
         // ファイル名のみモード
         if (options.GetFlagValue(OptionNames.FilenameOnly))
         {
-            await FormatFilenameOnlyAsync(result, options, writer);
+            await FormatFilenameOnlyAsync(result, options, writer).ConfigureAwait(false);
             return hasMatches ? 0 : 1;
         }
         
         // 通常の出力
-        await FormatNormalOutputAsync(result, options, writer);
+        await FormatNormalOutputAsync(result, options, writer).ConfigureAwait(false);
         return hasMatches ? 0 : 1;
     }
 

@@ -30,7 +30,7 @@ public class GrepApplication(
         {
             if (args.Length == 0)
             {
-                await Console.Error.WriteLineAsync("No arguments provided");
+                await Console.Error.WriteLineAsync("No arguments provided").ConfigureAwait(false);
                 return 2;
             }
             
@@ -38,20 +38,20 @@ public class GrepApplication(
             
             if (parseResult.ShowHelp)
             {
-                await Console.Out.WriteLineAsync(_command.GetHelpText());
+                await Console.Out.WriteLineAsync(_command.GetHelpText()).ConfigureAwait(false);
                 return 0;
             }
             
             if (!parseResult.IsSuccess)
             {
-                await Console.Error.WriteLineAsync($"Error: {parseResult.ErrorMessage}");
+                await Console.Error.WriteLineAsync($"Error: {parseResult.ErrorMessage}").ConfigureAwait(false);
                 return 2;
             }
 
             var optionContext = _command.ToOptionContext();
-            var searchResult = await _engine.SearchAsync(optionContext, cancellationToken);
+            var searchResult = await _engine.SearchAsync(optionContext, cancellationToken).ConfigureAwait(false);
 
-            return await _formatter.FormatOutputAsync(searchResult, optionContext, Console.Out);
+            return await _formatter.FormatOutputAsync(searchResult, optionContext, Console.Out).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -59,7 +59,7 @@ public class GrepApplication(
         }
         catch (Exception ex)
         {
-            await Console.Error.WriteLineAsync($"Fatal error: {ex.Message}");
+            await Console.Error.WriteLineAsync($"Fatal error: {ex.Message}").ConfigureAwait(false);
             return 2;
         }
     }
