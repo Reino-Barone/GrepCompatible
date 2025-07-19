@@ -104,20 +104,20 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     {
         var processorCount = Environment.ProcessorCount;
         
-        // MaxDegreeOfParallelismは0にできないため、最小値は1に設定
-        if (fileCount <= 0)
-            return 1;
-        
-        // 小さなファイル数の場合は並列度を制限
-        if (fileCount <= 4)
-            return Math.Min(fileCount, processorCount);
-        
-        // 中程度のファイル数の場合はCPUコア数を使用
-        if (fileCount <= 20)
-            return processorCount;
-        
-        // 大量のファイルの場合は少し並列度を上げる
-        return Math.Min(processorCount * 2, fileCount);
+        return fileCount switch
+        {
+            // MaxDegreeOfParallelismは0にできないため、最小値は1に設定
+            <= 0 => 1,
+            
+            // 小さなファイル数の場合は並列度を制限
+            <= 4 => Math.Min(fileCount, processorCount),
+            
+            // 中程度のファイル数の場合はCPUコア数を使用
+            <= 20 => processorCount,
+            
+            // 大量のファイルの場合は少し並列度を上げる
+            _ => Math.Min(processorCount * 2, fileCount)
+        };
     }
 
     /// <summary>
