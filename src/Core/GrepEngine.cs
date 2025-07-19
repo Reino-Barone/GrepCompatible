@@ -104,6 +104,10 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     {
         var processorCount = Environment.ProcessorCount;
         
+        // MaxDegreeOfParallelismは0にできないため、最小値は1に設定
+        if (fileCount <= 0)
+            return 1;
+        
         // 小さなファイル数の場合は並列度を制限
         if (fileCount <= 4)
             return Math.Min(fileCount, processorCount);
