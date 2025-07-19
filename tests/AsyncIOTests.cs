@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using GrepCompatible.Abstractions;
 using GrepCompatible.Core;
 using GrepCompatible.Test.Infrastructure;
@@ -108,7 +112,7 @@ public class AsyncIOTests
 
         // Act
         var files = new List<string>();
-        await foreach (var file in mockFileSystem.EnumerateFilesAsync("dir", "*.txt", SearchOption.TopDirectoryOnly))
+        await foreach (var file in mockFileSystem.EnumerateFilesAsync("dir", "*.txt", System.IO.SearchOption.TopDirectoryOnly))
         {
             files.Add(file);
         }

@@ -6,8 +6,13 @@ using GrepCompatible.Strategies;
 using GrepCompatible.Constants;
 using GrepCompatible.Test.Infrastructure;
 using Moq;
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace GrepCompatible.Test;
@@ -19,13 +24,22 @@ public class GrepEngineTests : IDisposable
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
     private readonly MockFileSystem _mockFileSystem = new();
     private readonly MockPathHelper _mockPathHelper = new();
+    private readonly Mock<IFileSearchService> _mockFileSearchService = new();
+    private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
+    private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
     private readonly ParallelGrepEngine _engine;
 
     public GrepEngineTests()
     {
         _mockStrategyFactory.Setup(f => f.CreateStrategy(It.IsAny<IOptionContext>()))
             .Returns(_mockStrategy.Object);
-        _engine = new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem, _mockPathHelper);
+        _engine = new ParallelGrepEngine(
+            _mockStrategyFactory.Object,
+            _mockFileSystem,
+            _mockPathHelper,
+            _mockFileSearchService.Object,
+            _mockPerformanceOptimizer.Object,
+            _mockMatchResultPool.Object);
     }
 
     [Fact]
@@ -428,21 +442,21 @@ public class GrepEngineTests : IDisposable
     public void Constructor_WithNullStrategyFactory_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(null!, _mockFileSystem, _mockPathHelper));
+        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(null!, _mockFileSystem, _mockPathHelper, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
     }
 
     [Fact]
     public void Constructor_WithNullFileSystem_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, null!, _mockPathHelper));
+        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, null!, _mockPathHelper, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
     }
 
     [Fact]
     public void Constructor_WithNullPathHelper_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem, null!));
+        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem, null!, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
     }
 
     private string CreateTempFile(string content, string extension = ".txt")

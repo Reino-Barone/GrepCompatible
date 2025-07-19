@@ -1,4 +1,9 @@
 using System.Text;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using System.Threading;
+using System;
 using GrepCompatible.Abstractions;
 using GrepCompatible.Core;
 using GrepCompatible.Models;
@@ -18,6 +23,9 @@ public class AsyncOptimizationIntegrationTests
     private readonly IMatchStrategyFactory _strategyFactory;
     private readonly MockFileSystem _fileSystem;
     private readonly MockPathHelper _pathHelper;
+    private readonly IFileSearchService _fileSearchService;
+    private readonly IPerformanceOptimizer _performanceOptimizer;
+    private readonly IMatchResultPool _matchResultPool;
     private readonly ParallelGrepEngine _engine;
 
     public AsyncOptimizationIntegrationTests()
@@ -25,7 +33,10 @@ public class AsyncOptimizationIntegrationTests
         _strategyFactory = new MatchStrategyFactory();
         _fileSystem = new MockFileSystem();
         _pathHelper = new MockPathHelper();
-        _engine = new ParallelGrepEngine(_strategyFactory, _fileSystem, _pathHelper);
+        _fileSearchService = new FileSearchService(_fileSystem, _pathHelper);
+        _performanceOptimizer = new PerformanceOptimizer();
+        _matchResultPool = new MatchResultPool();
+        _engine = new ParallelGrepEngine(_strategyFactory, _fileSystem, _pathHelper, _fileSearchService, _performanceOptimizer, _matchResultPool);
     }
 
     private DynamicOptions CreateOptions(string pattern, params string[] files)

@@ -88,7 +88,7 @@ public class FileSearchService(IFileSystem fileSystem, IPath pathHelper) : IFile
         
         if (_fileSystem.DirectoryExists(path))
         {
-            var searchOption = SearchOption.AllDirectories;
+            var searchOption = System.IO.SearchOption.AllDirectories;
             
             // 非同期ファイル列挙を使用してメモリ効率を向上
             await foreach (var file in _fileSystem.EnumerateFilesAsync(path, "*", searchOption, cancellationToken).ConfigureAwait(false))
@@ -116,7 +116,7 @@ public class FileSearchService(IFileSystem fileSystem, IPath pathHelper) : IFile
             
             if (_fileSystem.DirectoryExists(directory))
             {
-                return _fileSystem.EnumerateFiles(directory, fileName, SearchOption.TopDirectoryOnly);
+                return _fileSystem.EnumerateFiles(directory, fileName, System.IO.SearchOption.TopDirectoryOnly);
             }
         }
         catch (Exception)

@@ -1,3 +1,4 @@
+using System.Linq;
 using GrepCompatible.Test.Infrastructure;
 using Xunit;
 
@@ -54,7 +55,7 @@ public class MockFileSystemTests
         mockFs.AddFile(testFile2, "content2");
         
         // Assert
-        var files = mockFs.EnumerateFiles(testDir, "*", SearchOption.TopDirectoryOnly).ToList();
+        var files = mockFs.EnumerateFiles(testDir, "*", System.IO.SearchOption.TopDirectoryOnly).ToList();
         Assert.Equal(2, files.Count);
         Assert.Contains(testFile1, files);
         Assert.Contains(testFile2, files);

@@ -1,5 +1,9 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using GrepCompatible.Core;
 using GrepCompatible.Models;
 using GrepCompatible.Abstractions;
@@ -71,7 +75,10 @@ public class SimdPerformanceTests
         var testData = GenerateTestFile(LargeFileLines);
         var fileSystem = new MockFileSystem();
         var strategyFactory = new MatchStrategyFactory();
-        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper());
+        var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
+        var performanceOptimizer = new PerformanceOptimizer();
+        var matchResultPool = new MatchResultPool();
+        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper(), fileSearchService, performanceOptimizer, matchResultPool);
         
         // テストファイルを追加
         fileSystem.AddFile("test.txt", testData);
@@ -139,7 +146,10 @@ public class SimdPerformanceTests
         var testData = GenerateTestFile(LargeFileLines);
         var fileSystem = new MockFileSystem();
         var strategyFactory = new MatchStrategyFactory();
-        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper());
+        var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
+        var performanceOptimizer = new PerformanceOptimizer();
+        var matchResultPool = new MatchResultPool();
+        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper(), fileSearchService, performanceOptimizer, matchResultPool);
         
         // テストファイルを追加
         fileSystem.AddFile("test.txt", testData);
@@ -224,12 +234,15 @@ public class SimdPerformanceTests
         
         // SIMD戦略のテスト
         var simdFactory = new MatchStrategyFactory();
-        var simdEngine = new ParallelGrepEngine(simdFactory, fileSystem, pathHelper);
+        var fileSearchService = new FileSearchService(fileSystem, pathHelper);
+        var performanceOptimizer = new PerformanceOptimizer();
+        var matchResultPool = new MatchResultPool();
+        var simdEngine = new ParallelGrepEngine(simdFactory, fileSystem, pathHelper, fileSearchService, performanceOptimizer, matchResultPool);
         
         // 従来戦略のテスト（SIMD戦略を除外）
         var traditionalFactory = new MatchStrategyFactory();
         // SIMD戦略を削除して従来戦略のみを使用
-        var traditionalEngine = new ParallelGrepEngine(traditionalFactory, fileSystem, pathHelper);
+        var traditionalEngine = new ParallelGrepEngine(traditionalFactory, fileSystem, pathHelper, fileSearchService, performanceOptimizer, matchResultPool);
         
         // ウォームアップ
         await simdEngine.SearchAsync(options);
@@ -280,7 +293,10 @@ public class SimdPerformanceTests
         var testData = GenerateTestFile(LargeFileLines * 5); // 5倍の大きなファイル
         var fileSystem = new MockFileSystem();
         var strategyFactory = new MatchStrategyFactory();
-        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper());
+        var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
+        var performanceOptimizer = new PerformanceOptimizer();
+        var matchResultPool = new MatchResultPool();
+        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper(), fileSearchService, performanceOptimizer, matchResultPool);
         
         // テストファイルを追加
         fileSystem.AddFile("large_test.txt", testData);

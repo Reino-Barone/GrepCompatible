@@ -1,6 +1,12 @@
+using System;
 using System.Text;
-using GrepCompatible.Abstractions;
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Collections;
 using System.Runtime.CompilerServices;
+using GrepCompatible.Abstractions;
 
 namespace GrepCompatible.Test.Infrastructure;
 
@@ -83,7 +89,7 @@ public class MockFileSystem : IFileSystem
         return new MockFileStream(stream);
     }
     
-    public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption)
+    public IEnumerable<string> EnumerateFiles(string path, string searchPattern, System.IO.SearchOption searchOption)
     {
         var normalizedPath = NormalizePath(path);
         if (!_directories.Contains(normalizedPath))
@@ -97,7 +103,7 @@ public class MockFileSystem : IFileSystem
             var fileName = GetFileNameFromPath(filePath);
             var fileDirectory = GetDirectoryFromPath(filePath);
             
-            if (searchOption == SearchOption.AllDirectories)
+            if (searchOption == System.IO.SearchOption.AllDirectories)
             {
                 if (IsPathUnderDirectory(fileDirectory, normalizedPath) && regex.IsMatch(fileName))
                     yield return filePath;
@@ -266,7 +272,7 @@ public class MockFileSystem : IFileSystem
         }
     }
 
-    public async IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, SearchOption searchOption, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, System.IO.SearchOption searchOption, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         await Task.Yield(); // 非同期コンテキストに切り替え
         

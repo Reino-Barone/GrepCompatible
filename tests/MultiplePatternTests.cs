@@ -4,7 +4,13 @@ using GrepCompatible.Constants;
 using GrepCompatible.Abstractions;
 using GrepCompatible.Strategies;
 using Moq;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace GrepCompatible.Tests
@@ -14,6 +20,9 @@ namespace GrepCompatible.Tests
         private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory;
         private readonly Mock<IFileSystem> _mockFileSystem;
         private readonly Mock<IPath> _mockPath;
+        private readonly Mock<IFileSearchService> _mockFileSearchService;
+        private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer;
+        private readonly Mock<IMatchResultPool> _mockMatchResultPool;
         private readonly Mock<IOptionContext> _mockOptions;
         private readonly ParallelGrepEngine _engine;
 
@@ -22,8 +31,17 @@ namespace GrepCompatible.Tests
             _mockStrategyFactory = new Mock<IMatchStrategyFactory>();
             _mockFileSystem = new Mock<IFileSystem>();
             _mockPath = new Mock<IPath>();
+            _mockFileSearchService = new Mock<IFileSearchService>();
+            _mockPerformanceOptimizer = new Mock<IPerformanceOptimizer>();
+            _mockMatchResultPool = new Mock<IMatchResultPool>();
             _mockOptions = new Mock<IOptionContext>();
-            _engine = new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem.Object, _mockPath.Object);
+            _engine = new ParallelGrepEngine(
+                _mockStrategyFactory.Object,
+                _mockFileSystem.Object,
+                _mockPath.Object,
+                _mockFileSearchService.Object,
+                _mockPerformanceOptimizer.Object,
+                _mockMatchResultPool.Object);
         }
 
         [Fact]
@@ -95,11 +113,11 @@ namespace GrepCompatible.Tests
 
         private void SetupMockFileSystem(string[] files)
         {
-            _mockFileSystem.Setup(fs => fs.EnumerateFiles(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SearchOption>()))
+            _mockFileSystem.Setup(fs => fs.EnumerateFiles(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<System.IO.SearchOption>()))
                 .Returns(files);
             
             // 非同期版のEnumerateFilesAsyncもセットアップ
-            _mockFileSystem.Setup(fs => fs.EnumerateFilesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SearchOption>(), It.IsAny<CancellationToken>()))
+            _mockFileSystem.Setup(fs => fs.EnumerateFilesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<System.IO.SearchOption>(), It.IsAny<CancellationToken>()))
                 .Returns(ToAsyncEnumerable(files));
             
             foreach (var file in files)

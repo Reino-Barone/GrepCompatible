@@ -5,8 +5,12 @@ using GrepCompatible.Strategies;
 using GrepCompatible.Constants;
 using GrepCompatible.Test.Infrastructure;
 using Moq;
+using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace GrepCompatible.Test;
@@ -20,13 +24,22 @@ public class GrepEngineDebugTests : IDisposable
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
     private readonly MockFileSystem _mockFileSystem = new();
     private readonly MockPathHelper _mockPathHelper = new();
+    private readonly Mock<IFileSearchService> _mockFileSearchService = new();
+    private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
+    private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
     private readonly ParallelGrepEngine _engine;
 
     public GrepEngineDebugTests()
     {
         _mockStrategyFactory.Setup(f => f.CreateStrategy(It.IsAny<IOptionContext>()))
             .Returns(_mockStrategy.Object);
-        _engine = new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem, _mockPathHelper);
+        _engine = new ParallelGrepEngine(
+            _mockStrategyFactory.Object,
+            _mockFileSystem,
+            _mockPathHelper,
+            _mockFileSearchService.Object,
+            _mockPerformanceOptimizer.Object,
+            _mockMatchResultPool.Object);
     }
 
     [Fact]

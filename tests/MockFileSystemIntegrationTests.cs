@@ -6,6 +6,11 @@ using GrepCompatible.Test.Infrastructure;
 using GrepCompatible.Constants;
 using GrepCompatible.CommandLine;
 using Moq;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
 using Xunit;
 
 namespace GrepCompatible.Test;
@@ -19,13 +24,22 @@ public class MockFileSystemIntegrationTests
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
     private readonly MockFileSystem _mockFileSystem = new();
     private readonly MockPathHelper _mockPathHelper = new();
+    private readonly Mock<IFileSearchService> _mockFileSearchService = new();
+    private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
+    private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
     private readonly ParallelGrepEngine _engine;
 
     public MockFileSystemIntegrationTests()
     {
         _mockStrategyFactory.Setup(f => f.CreateStrategy(It.IsAny<IOptionContext>()))
             .Returns(_mockStrategy.Object);
-        _engine = new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem, _mockPathHelper);
+        _engine = new ParallelGrepEngine(
+            _mockStrategyFactory.Object,
+            _mockFileSystem,
+            _mockPathHelper,
+            _mockFileSearchService.Object,
+            _mockPerformanceOptimizer.Object,
+            _mockMatchResultPool.Object);
     }
 
     [Fact]
@@ -107,8 +121,8 @@ public class MockFileSystemIntegrationTests
         _mockFileSystem.AddFile("src/subdir/file3.txt", "content3");
         
         // Act
-        var topLevelFiles = _mockFileSystem.EnumerateFiles("src", "*", SearchOption.TopDirectoryOnly);
-        var allFiles = _mockFileSystem.EnumerateFiles("src", "*", SearchOption.AllDirectories);
+        var topLevelFiles = _mockFileSystem.EnumerateFiles("src", "*", System.IO.SearchOption.TopDirectoryOnly);
+        var allFiles = _mockFileSystem.EnumerateFiles("src", "*", System.IO.SearchOption.AllDirectories);
         
         // Assert
         Assert.Equal(2, topLevelFiles.Count());

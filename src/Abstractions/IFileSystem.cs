@@ -56,7 +56,7 @@ public interface IFileSystem
     /// <param name="searchPattern">検索パターン</param>
     /// <param name="searchOption">検索オプション</param>
     /// <returns>ファイルパスの列挙</returns>
-    IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption);
+    IEnumerable<string> EnumerateFiles(string path, string searchPattern, System.IO.SearchOption searchOption);
     
     /// <summary>
     /// 標準入力からStreamReaderを取得
@@ -102,7 +102,7 @@ public interface IFileSystem
     /// <param name="searchOption">検索オプション</param>
     /// <param name="cancellationToken">キャンセレーショントークン</param>
     /// <returns>ファイルパスを非同期で返すIAsyncEnumerable</returns>
-    IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, SearchOption searchOption, CancellationToken cancellationToken = default);
+    IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, System.IO.SearchOption searchOption, CancellationToken cancellationToken = default);
 }
 
 /// <summary>
