@@ -625,7 +625,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     /// <summary>
     /// 共通のコンテキスト付き処理コア（真のストリーミング型）
     /// </summary>
-    private async Task<FileResult> ProcessCoreWithContextAsync(string fileName, IAsyncEnumerable<string> lineSource, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
+    private static async Task<FileResult> ProcessCoreWithContextAsync(string fileName, IAsyncEnumerable<string> lineSource, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
     {
         try
         {
