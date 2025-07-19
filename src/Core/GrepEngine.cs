@@ -2,12 +2,10 @@ using GrepCompatible.Abstractions;
 using GrepCompatible.Constants;
 using GrepCompatible.Models;
 using GrepCompatible.Strategies;
-using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace GrepCompatible.Core;
 
@@ -28,34 +26,33 @@ public interface IGrepEngine
 /// <summary>
 /// 並列処理対応のGrep実装
 /// </summary>
-public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSystem fileSystem, IPath pathHelper) : IGrepEngine
+public class ParallelGrepEngine(
+    IMatchStrategyFactory strategyFactory,
+    IFileSystem fileSystem,
+    IPath pathHelper,
+    IFileSearchService fileSearchService,
+    IPerformanceOptimizer performanceOptimizer,
+    IMatchResultPool matchResultPool) : IGrepEngine
 {
     private readonly IMatchStrategyFactory _strategyFactory = strategyFactory ?? throw new ArgumentNullException(nameof(strategyFactory));
     private readonly IFileSystem _fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
     private readonly IPath _pathHelper = pathHelper ?? throw new ArgumentNullException(nameof(pathHelper));
-    private static readonly string[] sourceArray = ["-"];
-    private static readonly ArrayPool<MatchResult> _matchPool = ArrayPool<MatchResult>.Shared;
-    private static readonly ConcurrentDictionary<string, Regex> _regexCache = new();
-    private static readonly object _regexCacheLock = new();
-    
-    // 正規表現の特殊文字セット（.NET 8+のSearchValues使用）
-    private static readonly SearchValues<char> _regexSpecialChars = SearchValues.Create([
-        '.', '^', '$', '(', ')', '[', ']', '{', '}', '|', '\\', '+', '*', '?'
-    ]);
-
-    public async Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default)
+    private readonly IFileSearchService _fileSearchService = fileSearchService ?? throw new ArgumentNullException(nameof(fileSearchService));
+    private readonly IPerformanceOptimizer _performanceOptimizer = performanceOptimizer ?? throw new ArgumentNullException(nameof(performanceOptimizer));
+    private readonly IMatchResultPool _matchResultPool = matchResultPool ?? throw new ArgumentNullException(nameof(matchResultPool));
+public async Task<SearchResult> SearchAsync(IOptionContext options, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
         var strategy = _strategyFactory.CreateStrategy(options);
         
         try
         {
-            var files = await ExpandFilesAsync(options, cancellationToken).ConfigureAwait(false);
+            var files = await _fileSearchService.ExpandFilesAsync(options, cancellationToken).ConfigureAwait(false);
             var filesList = files.ToList();
             var results = new ConcurrentBag<FileResult>();
             
             // ファイル数に基づいて並列度を動的に調整
-            var optimalParallelism = CalculateOptimalParallelism(filesList.Count);
+            var optimalParallelism = _performanceOptimizer.CalculateOptimalParallelism(filesList.Count);
             
             // 並列処理でファイルを処理
             var parallelOptions = new ParallelOptions
@@ -89,377 +86,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         }
     }
 
-    /// <summary>
-    /// ファイル数に基づいて最適な並列度を計算
-    /// </summary>
-    /// <param name="fileCount">処理するファイル数</param>
-    /// <returns>最適な並列度</returns>
-    private static int CalculateOptimalParallelism(int fileCount)
-    {
-        var processorCount = Environment.ProcessorCount;
-        
-        return fileCount switch
-        {
-            // MaxDegreeOfParallelismは0にできないため、最小値は1に設定
-            <= 0 => 1,
-            
-            // 小さなファイル数の場合は並列度を制限
-            <= 4 => Math.Min(fileCount, processorCount),
-            
-            // 中程度のファイル数の場合はCPUコア数を使用
-            <= 20 => processorCount,
-            
-            // 大量のファイルの場合は少し並列度を上げる
-            _ => Math.Min(processorCount * 2, fileCount)
-        };
-    }
 
-    /// <summary>
-    /// ArrayPoolを使用した動的配列管理
-    /// </summary>
-    private static (MatchResult[] array, int newSize) ResizeArrayIfNeeded(MatchResult[] currentArray, int currentCount, int currentSize, int maxCount)
-    {
-        // 最大数制限がある場合は現在の配列を使用
-        if (maxCount > 0 && currentCount >= maxCount)
-            return (currentArray, currentSize);
-        
-        // 配列がフルになった場合は拡張
-        if (currentCount >= currentSize)
-        {
-            var newSize = Math.Min(currentSize * 2, maxCount > 0 ? maxCount : currentSize * 2);
-            var newArray = _matchPool.Rent(newSize);
-            Array.Copy(currentArray, newArray, currentCount);
-            _matchPool.Return(currentArray, clearArray: true);
-            return (newArray, newSize);
-        }
-        
-        return (currentArray, currentSize);
-    }
-
-    /// <summary>
-    /// ArrayPoolを使用した共通の配列処理ロジック
-    /// </summary>
-    private static void AddMatchToArray(ref MatchResult[] array, ref int arraySize, ref int actualCount, MatchResult match, int? maxCount)
-    {
-        // 配列のリサイズが必要かチェック
-        (array, arraySize) = ResizeArrayIfNeeded(array, actualCount, arraySize, maxCount ?? 0);
-        
-        // マッチを配列に追加
-        array[actualCount++] = match;
-    }
-
-    /// <summary>
-    /// 共通の結果作成ロジック
-    /// </summary>
-    private static FileResult CreateFileResultFromArray(string fileName, MatchResult[] rentedArray, int actualCount)
-    {
-        var results = new MatchResult[actualCount];
-        Array.Copy(rentedArray, results, actualCount);
-        return new FileResult(fileName, results.AsReadOnly(), actualCount);
-    }
-
-    private async Task<IEnumerable<string>> ExpandFilesAsync(IOptionContext options, CancellationToken cancellationToken)
-    {
-        var files = new List<string>();
-        var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ??
-            sourceArray.ToList().AsReadOnly();
-        var isRecursive = options.GetFlagValue(OptionNames.RecursiveSearch);
-        
-        foreach (var filePattern in filesArg)
-        {
-            if (filePattern == "-")
-            {
-                files.Add("-"); // 標準入力
-                continue;
-            }
-            
-            if (isRecursive)
-            {
-                var expandedFiles = await ExpandRecursiveAsync(filePattern, options, cancellationToken).ConfigureAwait(false);
-                files.AddRange(expandedFiles);
-            }
-            else if (_fileSystem.FileExists(filePattern))
-            {
-                files.Add(filePattern);
-            }
-            else
-            {
-                // グロブパターンの展開
-                var expandedFiles = ExpandGlobPattern(filePattern);
-                files.AddRange(expandedFiles);
-            }
-        }
-        
-        return files.Distinct();
-    }
-
-    private async Task<IEnumerable<string>> ExpandRecursiveAsync(string path, IOptionContext options, CancellationToken cancellationToken)
-    {
-        var files = new List<string>();
-        
-        if (_fileSystem.DirectoryExists(path))
-        {
-            var searchOption = SearchOption.AllDirectories;
-            
-            // 非同期ファイル列挙を使用してメモリ効率を向上
-            await foreach (var file in _fileSystem.EnumerateFilesAsync(path, "*", searchOption, cancellationToken).ConfigureAwait(false))
-            {
-                if (ShouldIncludeFile(file, options))
-                {
-                    files.Add(file);
-                }
-            }
-        }
-        else if (_fileSystem.FileExists(path))
-        {
-            files.Add(path);
-        }
-        
-        return files;
-    }
-
-    private IEnumerable<string> ExpandGlobPattern(string pattern)
-    {
-        try
-        {
-            var directory = _pathHelper.GetDirectoryName(pattern) ?? ".";
-            var fileName = _pathHelper.GetFileName(pattern);
-            
-            if (_fileSystem.DirectoryExists(directory))
-            {
-                return _fileSystem.EnumerateFiles(directory, fileName, SearchOption.TopDirectoryOnly);
-            }
-        }
-        catch (Exception)
-        {
-            // グロブ展開に失敗した場合はパターンをそのまま返す
-        }
-        
-        return [pattern];
-    }
-
-    /// <summary>
-    /// ファイルサイズに応じた最適なバッファサイズを計算
-    /// </summary>
-    /// <param name="fileSize">ファイルサイズ（バイト）</param>
-    /// <returns>最適なバッファサイズ</returns>
-    private static int GetOptimalBufferSize(long fileSize)
-    {
-        // 小さなファイル（1KB未満）: 1KB
-        if (fileSize < 1024)
-            return 1024;
-        
-        // 中程度のファイル（1MB未満）: 4KB
-        if (fileSize < 1024 * 1024)
-            return 4096;
-        
-        // 大きなファイル（10MB未満）: 8KB
-        if (fileSize < 10 * 1024 * 1024)
-            return 8192;
-        
-        // 非常に大きなファイル: 16KB
-        return 16384;
-    }
-
-    /// <summary>
-    /// SearchValues&lt;char&gt;を使用したglobパターン変換
-    /// </summary>
-    /// <param name="globPattern">globパターン</param>
-    /// <returns>正規表現パターン</returns>
-    private static string ConvertGlobToRegex(string globPattern)
-    {
-        if (string.IsNullOrEmpty(globPattern))
-            return string.Empty;
-        
-        ReadOnlySpan<char> pattern = globPattern.AsSpan();
-        
-        // 結果を格納するためのバッファ（推定サイズ）
-        var buffer = new char[globPattern.Length * 2 + 2];
-        var resultLength = 0;
-        
-        // 開始アンカーを追加
-        buffer[resultLength++] = '^';
-        
-        int i = 0;
-        while (i < pattern.Length)
-        {
-            // SearchValuesを使用して特殊文字の次の出現位置を効率的に検索
-            int nextSpecialIndex = pattern[i..].IndexOfAny(_regexSpecialChars);
-            
-            if (nextSpecialIndex == -1)
-            {
-                // 特殊文字が見つからない場合、残りの文字をそのままコピー
-                var remaining = pattern[i..];
-                remaining.CopyTo(buffer.AsSpan(resultLength));
-                resultLength += remaining.Length;
-                break;
-            }
-            
-            // 特殊文字までの通常文字をコピー
-            var normalChars = pattern[i..(i + nextSpecialIndex)];
-            normalChars.CopyTo(buffer.AsSpan(resultLength));
-            resultLength += normalChars.Length;
-            
-            // 特殊文字を処理
-            char specialChar = pattern[i + nextSpecialIndex];
-            switch (specialChar)
-            {
-                case '*':
-                    buffer[resultLength++] = '.';
-                    buffer[resultLength++] = '*';
-                    break;
-                
-                case '?':
-                    buffer[resultLength++] = '.';
-                    break;
-                
-                default:
-                    // その他の特殊文字はエスケープ
-                    buffer[resultLength++] = '\\';
-                    buffer[resultLength++] = specialChar;
-                    break;
-            }
-            
-            i += nextSpecialIndex + 1;
-        }
-        
-        // 終了アンカーを追加
-        buffer[resultLength++] = '$';
-        
-        return new string(buffer, 0, resultLength);
-    }
-
-    /// <summary>
-    /// パターンをコンパイルされた正規表現として取得（キャッシュ機能付き）
-    /// </summary>
-    /// <param name="pattern">パターン（globまたは正規表現）</param>
-    /// <param name="isGlobPattern">globパターンかどうか</param>
-    /// <returns>コンパイルされた正規表現</returns>
-    private static Regex GetCompiledRegex(string pattern, bool isGlobPattern)
-    {
-        var key = isGlobPattern ? $"glob:{pattern}" : $"regex:{pattern}";
-        
-        return _regexCache.GetOrAdd(key, _ =>
-        {
-            var regexPattern = isGlobPattern ? ConvertGlobToRegex(pattern) : pattern;
-            return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        });
-    }
-
-    /// <summary>
-    /// 複数パターンのマッチングを実行
-    /// </summary>
-    /// <param name="fileName">ファイル名</param>
-    /// <param name="fullPath">フルパス（正規化済み）</param>
-    /// <param name="patterns">パターンのリスト</param>
-    /// <param name="isExclude">除外パターンかどうか</param>
-    /// <returns>マッチしたかどうか</returns>
-    private static bool MatchesAnyPattern(string fileName, string fullPath, IEnumerable<string> patterns, bool isExclude)
-    {
-        foreach (var pattern in patterns)
-        {
-            if (string.IsNullOrEmpty(pattern))
-                continue;
-
-            var isGlobPattern = pattern.Contains('*') || pattern.Contains('?');
-            
-            bool matches;
-            if (isGlobPattern)
-            {
-                var regex = GetCompiledRegex(pattern, true);
-                
-                // パターンに'/'が含まれる場合はフルパスでマッチング、そうでなければファイル名のみ
-                var targetText = pattern.Contains('/') ? fullPath : fileName;
-                matches = regex.IsMatch(targetText);
-            }
-            else
-            {
-                // 非globパターンの場合も同様にパスの判定を行う
-                var targetText = pattern.Contains('/') ? fullPath : fileName;
-                matches = targetText.Equals(pattern, StringComparison.OrdinalIgnoreCase);
-            }
-
-            if (matches)
-                return true;
-        }
-        
-        return false;
-    }
-
-    private bool ShouldIncludeFile(string filePath, IOptionContext options)
-    {
-        var fileName = _pathHelper.GetFileName(filePath);
-        var normalizedPath = filePath.Replace('\\', '/'); // Windowsパスを正規化
-        
-        // 除外パターンのチェック（複数パターン対応）
-        var excludePatterns = GetPatterns(options, OptionNames.ExcludePattern);
-        if (excludePatterns.Count > 0)
-        {
-            if (MatchesAnyPattern(fileName, normalizedPath, excludePatterns, true))
-                return false;
-        }
-        
-        // 包含パターンのチェック（複数パターン対応）
-        var includePatterns = GetPatterns(options, OptionNames.IncludePattern);
-        if (includePatterns.Count > 0)
-        {
-            if (!MatchesAnyPattern(fileName, normalizedPath, includePatterns, false))
-                return false;
-        }
-        
-        return true;
-    }
-
-    /// <summary>
-    /// オプションから複数パターンを取得
-    /// </summary>
-    /// <param name="options">オプションコンテキスト</param>
-    /// <param name="optionName">オプション名</param>
-    /// <returns>パターンのリスト</returns>
-    private static List<string> GetPatterns(IOptionContext options, OptionNames optionName)
-    {
-        var patterns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        
-        // 後方互換性のため、まず単一の値を取得
-        var singleValue = options.GetStringValue(optionName);
-        if (!string.IsNullOrEmpty(singleValue))
-        {
-            // 単一値内でのコンマ・セミコロン区切りもサポート
-            var splitPatterns = singleValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var pattern in splitPatterns)
-            {
-                var trimmedPattern = pattern.Trim();
-                if (!string.IsNullOrEmpty(trimmedPattern))
-                {
-                    patterns.Add(trimmedPattern);
-                }
-            }
-        }
-        
-        // 複数の同名オプションの値を全て取得
-        var allOptionValues = options.GetAllStringValues(optionName);
-        if (allOptionValues != null)
-        {
-            foreach (var optionValue in allOptionValues)
-            {
-                if (string.IsNullOrEmpty(optionValue))
-                    continue;
-                
-                // 各オプション値内でのコンマ・セミコロン区切りもサポート
-                var splitPatterns = optionValue.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var pattern in splitPatterns)
-                {
-                    var trimmedPattern = pattern.Trim();
-                    if (!string.IsNullOrEmpty(trimmedPattern))
-                    {
-                        patterns.Add(trimmedPattern);
-                    }
-                }
-            }
-        }
-        
-        return [.. patterns];
-    }
 
     private async Task<FileResult> ProcessFileAsync(string filePath, IMatchStrategy strategy, IOptionContext options, CancellationToken cancellationToken)
     {
@@ -507,7 +134,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     private async Task<FileResult> ProcessFileWithContextAsync(string filePath, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
     {
         var fileInfo = _fileSystem.GetFileInfo(filePath);
-        var bufferSize = GetOptimalBufferSize(fileInfo.Length);
+        var bufferSize = _performanceOptimizer.GetOptimalBufferSize(fileInfo.Length);
         
         using var fileStream = _fileSystem.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
         using var reader = new StreamReader(fileStream, Encoding.UTF8);
@@ -535,9 +162,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     private async Task<FileResult> ProcessCoreAsync(string fileName, TextReader reader, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
     {
         var estimatedSize = maxCount ?? 1000;
-        var rentedArray = _matchPool.Rent(estimatedSize);
-        var arraySize = estimatedSize;
-        var actualCount = 0;
+        using var pooledArray = _matchResultPool.Rent(estimatedSize);
         var lineNumber = 0;
         var hasMaxCountLimit = maxCount.HasValue;
         var maxCountValue = maxCount ?? int.MaxValue;
@@ -559,9 +184,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                     {
                         var lineMemory = line.AsMemory();
                         var match = new MatchResult(fileName, lineNumber, line, lineMemory, 0, line.Length);
-                        AddMatchToArray(ref rentedArray, ref arraySize, ref actualCount, match, maxCount);
+                        _matchResultPool.AddMatch(pooledArray, match, maxCount);
                         
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                        if (hasMaxCountLimit && pooledArray.Count >= maxCountValue)
                             break;
                     }
                 }
@@ -577,9 +202,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                     
                     foreach (var match in lineMatches)
                     {
-                        AddMatchToArray(ref rentedArray, ref arraySize, ref actualCount, match, maxCount);
+                        _matchResultPool.AddMatch(pooledArray, match, maxCount);
                         
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                        if (hasMaxCountLimit && pooledArray.Count >= maxCountValue)
                             goto exitLoop;
                     }
                 }
@@ -587,15 +212,11 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             
             exitLoop:
             
-            return CreateFileResultFromArray(fileName, rentedArray, actualCount);
+            return _matchResultPool.CreateFileResult(fileName, pooledArray);
         }
         catch (Exception ex)
         {
             return new FileResult(fileName, [], 0, true, ex.Message);
-        }
-        finally
-        {
-            _matchPool.Return(rentedArray, clearArray: true);
         }
     }
 
@@ -777,9 +398,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     private async Task<FileResult> ProcessCoreStreamingAsync(string fileName, IAsyncEnumerable<ReadOnlyMemory<char>> lineSource, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
     {
         var estimatedSize = maxCount ?? 1000;
-        var rentedArray = _matchPool.Rent(estimatedSize);
-        var arraySize = estimatedSize;
-        var actualCount = 0;
+        using var pooledArray = _matchResultPool.Rent(estimatedSize);
         var lineNumber = 0;
         var hasMaxCountLimit = maxCount.HasValue;
         var maxCountValue = maxCount ?? int.MaxValue;
@@ -799,9 +418,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                     if (!lineMatches.Any())
                     {
                         var match = new MatchResult(fileName, lineNumber, line, lineMemory, 0, lineMemory.Length);
-                        AddMatchToArray(ref rentedArray, ref arraySize, ref actualCount, match, maxCount);
+                        _matchResultPool.AddMatch(pooledArray, match, maxCount);
                         
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                        if (hasMaxCountLimit && pooledArray.Count >= maxCountValue)
                             break;
                     }
                 }
@@ -809,9 +428,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                 {
                     foreach (var match in lineMatches)
                     {
-                        AddMatchToArray(ref rentedArray, ref arraySize, ref actualCount, match, maxCount);
+                        _matchResultPool.AddMatch(pooledArray, match, maxCount);
                         
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                        if (hasMaxCountLimit && pooledArray.Count >= maxCountValue)
                             goto exitLoop;
                     }
                 }
@@ -819,15 +438,11 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             
             exitLoop:
             
-            return CreateFileResultFromArray(fileName, rentedArray, actualCount);
+            return _matchResultPool.CreateFileResult(fileName, pooledArray);
         }
         catch (Exception ex)
         {
             return new FileResult(fileName, [], 0, true, ex.Message);
-        }
-        finally
-        {
-            _matchPool.Return(rentedArray, clearArray: true);
         }
     }
 
