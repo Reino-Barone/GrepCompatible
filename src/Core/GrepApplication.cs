@@ -60,6 +60,7 @@ public class GrepApplication(
         catch (Exception ex)
         {
             await Console.Error.WriteLineAsync($"Fatal error: {ex.Message}").ConfigureAwait(false);
+            await Console.Error.WriteLineAsync($"Stack trace: {ex.StackTrace}").ConfigureAwait(false);
             return 2;
         }
     }
