@@ -268,118 +268,11 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     }
 
     /// <summary>
-    /// globパターンを正規表現パターンに変換する
-    /// </summary>
-    /// <param name="globPattern">globパターン（例: *.cs, test?.txt）</param>
-    /// <returns>正規表現パターン</returns>
-    private static string ConvertGlobToRegex(string globPattern)
-    {
-        if (string.IsNullOrEmpty(globPattern))
-            return string.Empty;
-        
-        // Spanを使用してメモリ効率的に処理
-        ReadOnlySpan<char> pattern = globPattern.AsSpan();
-        
-        // 結果を格納するためのSpanバッファ（推定サイズ）
-        Span<char> buffer = stackalloc char[globPattern.Length * 2];
-        var resultLength = 0;
-        
-        // 開始アンカーを追加
-        buffer[resultLength++] = '^';
-
-        for (int i = 0, len = pattern.Length; i < len; i++)
-        {
-            char c = pattern[i];
-            
-            switch (c)
-            {
-                case '*':
-                    // * → .*
-                    buffer[resultLength++] = '.';
-                    buffer[resultLength++] = '*';
-                    break;
-                
-                case '?':
-                    // ? → .
-                    buffer[resultLength++] = '.';
-                    break;
-                
-                case '.':
-                case '^':
-                case '$':
-                case '(':
-                case ')':
-                case '[':
-                case ']':
-                case '{':
-                case '}':
-                case '|':
-                case '\\':
-                case '+':
-                    // 正規表現の特殊文字をエスケープ
-                    buffer[resultLength++] = '\\';
-                    buffer[resultLength++] = c;
-                    break;
-                
-                default:
-                    // 通常の文字はそのまま
-                    buffer[resultLength++] = c;
-                    break;
-            }
-            
-            // バッファオーバーフロー防止
-            if (resultLength >= buffer.Length - 2)
-            {
-                // バッファが足りない場合は従来の方法にフォールバック
-                var sb = new StringBuilder();
-                sb.Append('^');
-                foreach (char _c in globPattern)
-                {
-                    switch (_c)
-                    {
-                        case '*':
-                            sb.Append(".*");
-                            break;
-                        case '?':
-                            sb.Append('.');
-                            break;
-                        case '.':
-                        case '^':
-                        case '$':
-                        case '(':
-                        case ')':
-                        case '[':
-                        case ']':
-                        case '{':
-                        case '}':
-                        case '|':
-                        case '\\':
-                        case '+':
-                            sb.Append('\\').Append(_c);
-                            break;
-                        default:
-                            sb.Append(_c);
-                            break;
-                    }
-                }
-                sb.Append('$');
-                return sb.ToString();
-            }
-        }
-        
-        // 終了アンカーを追加
-        buffer[resultLength++] = '$';
-        
-        // Spanから文字列を作成
-        return new string(buffer[..resultLength]);
-    }
-
-    /// <summary>
-    /// SearchValues&lt;char&gt;を使用したより効率的なglobパターン変換
+    /// SearchValues&lt;char&gt;を使用したglobパターン変換
     /// </summary>
     /// <param name="globPattern">globパターン</param>
     /// <returns>正規表現パターン</returns>
-    private static string ConvertGlobToRegexOptimized(string globPattern)
+    private static string ConvertGlobToRegex(string globPattern)
     {
         if (string.IsNullOrEmpty(globPattern))
             return string.Empty;
@@ -454,7 +347,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         
         return _regexCache.GetOrAdd(key, _ =>
         {
-            var regexPattern = isGlobPattern ? ConvertGlobToRegexOptimized(pattern) : pattern;
+            var regexPattern = isGlobPattern ? ConvertGlobToRegex(pattern) : pattern;
             return new Regex(regexPattern, RegexOptions.IgnoreCase | RegexOptions.Compiled);
         });
     }
@@ -589,18 +482,18 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         {
             if (needsContext)
             {
-                return await ProcessStandardInputWithOptimizedContextAsync(strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken).ConfigureAwait(false);
+                return await ProcessStandardInputWithContextAsync(strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                return await ProcessStandardInputOptimizedAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
+                return await ProcessStandardInputAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
             }
         }
         
-        // コンテキストが必要な場合は最適化された専用の処理を使用
+        // コンテキストが必要な場合は専用の処理を使用
         if (needsContext)
         {
-            return await ProcessFileWithOptimizedContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken).ConfigureAwait(false);
+            return await ProcessFileWithContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken).ConfigureAwait(false);
         }
         
         // 小さなファイルの場合は高速パスを使用
@@ -614,12 +507,12 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         return await ProcessFileStreamingAsync(filePath, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
     }
 
-    // 古いメソッドは削除されました - ProcessFileWithOptimizedContextAsync を使用してください
+    // 古いメソッドは削除されました - ProcessFileWithContextAsync を使用してください
 
     /// <summary>
-    /// コンテキスト重複の最適化されたマッチ処理
+    /// ファイルのコンテキスト付きマッチ処理
     /// </summary>
-    private async Task<FileResult> ProcessFileWithOptimizedContextAsync(string filePath, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessFileWithContextAsync(string filePath, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
     {
         try
         {
@@ -690,7 +583,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             }
             
             // 第2パス: コンテキスト範囲の最適化
-            var contextualMatches = CreateOptimizedContextualMatches(matches, allLines, matchingIndices, contextBefore, contextAfter);
+            var contextualMatches = CreateContextualMatches(matches, allLines, matchingIndices, contextBefore, contextAfter);
             
             return new FileResult(filePath, matches.AsReadOnly(), matches.Count, false, null, contextualMatches.AsReadOnly());
         }
@@ -837,9 +730,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     }
 
     /// <summary>
-    /// 最適化されたコンテキストマッチの作成
+    /// コンテキストマッチの作成
     /// </summary>
-    private static ReadOnlyCollection<ContextualMatchResult> CreateOptimizedContextualMatches(List<MatchResult> matches, List<string> allLines, List<int> matchingIndices, int contextBefore, int contextAfter)
+    private static ReadOnlyCollection<ContextualMatchResult> CreateContextualMatches(List<MatchResult> matches, List<string> allLines, List<int> matchingIndices, int contextBefore, int contextAfter)
     {
         var contextualMatches = new List<ContextualMatchResult>();
         var processedRanges = new HashSet<(int Start, int End)>();
@@ -881,9 +774,9 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     }
 
     /// <summary>
-    /// 共通の最適化された処理コア（TextReader使用）
+    /// 共通の処理コア（TextReader使用）
     /// </summary>
-    private async Task<FileResult> ProcessCoreOptimizedAsync(string fileName, TextReader reader, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessCoreAsync(string fileName, TextReader reader, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
     {
         var estimatedSize = maxCount ?? 1000;
         var rentedArray = _matchPool.Rent(estimatedSize);
@@ -951,19 +844,19 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     }
 
     /// <summary>
-    /// 最適化された標準入力処理
+    /// 標準入力処理
     /// </summary>
-    private async Task<FileResult> ProcessStandardInputOptimizedAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessStandardInputAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
     {
         const string fileName = "(standard input)";
         using var reader = _fileSystem.GetStandardInput();
-        return await ProcessCoreOptimizedAsync(fileName, reader, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
+        return await ProcessCoreAsync(fileName, reader, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// 最適化された標準入力のコンテキスト処理
+    /// 標準入力のコンテキスト処理
     /// </summary>
-    private async Task<FileResult> ProcessStandardInputWithOptimizedContextAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
+    private async Task<FileResult> ProcessStandardInputWithContextAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, int contextBefore, int contextAfter, CancellationToken cancellationToken)
     {
         try
         {
@@ -1018,7 +911,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
                 }
             }
             
-            var contextualMatches = CreateOptimizedContextualMatches(matches, allLines, matchingIndices, contextBefore, contextAfter);
+            var contextualMatches = CreateContextualMatches(matches, allLines, matchingIndices, contextBefore, contextAfter);
             
             return new FileResult(fileName, matches.AsReadOnly(), matches.Count, false, null, contextualMatches);
         }
@@ -1095,16 +988,6 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
     {
         var lineSource = _fileSystem.ReadLinesAsMemoryAsync(filePath, cancellationToken);
         return await ProcessCoreStreamingAsync(filePath, lineSource, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>
-    /// 標準入力のストリーミング処理
-    /// </summary>
-    private async Task<FileResult> ProcessStandardInputStreamingAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
-    {
-        const string fileName = "(standard input)";
-        var lineSource = _fileSystem.ReadStandardInputAsMemoryAsync(cancellationToken);
-        return await ProcessCoreStreamingAsync(fileName, lineSource, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
