@@ -56,21 +56,25 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         
         try
         {
-            var files = await ExpandFilesAsync(options, cancellationToken);
+            var files = await ExpandFilesAsync(options, cancellationToken).ConfigureAwait(false);
+            var filesList = files.ToList();
             var results = new ConcurrentBag<FileResult>();
+            
+            // ファイル数に基づいて並列度を動的に調整
+            var optimalParallelism = CalculateOptimalParallelism(filesList.Count);
             
             // 並列処理でファイルを処理
             var parallelOptions = new ParallelOptions
             {
                 CancellationToken = cancellationToken,
-                MaxDegreeOfParallelism = Environment.ProcessorCount
+                MaxDegreeOfParallelism = optimalParallelism
             };
             
-            await Parallel.ForEachAsync(files, parallelOptions, async (file, ct) =>
+            await Parallel.ForEachAsync(filesList, parallelOptions, async (file, ct) =>
             {
-                var result = await ProcessFileAsync(file, strategy, options, ct);
+                var result = await ProcessFileAsync(file, strategy, options, ct).ConfigureAwait(false);
                 results.Add(result);
-            });
+            }).ConfigureAwait(false);
             
             var fileResults = results.ToArray();
             var totalMatches = fileResults.Sum(r => r.TotalMatches);
@@ -91,6 +95,49 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         }
     }
 
+    /// <summary>
+    /// ファイル数に基づいて最適な並列度を計算
+    /// </summary>
+    /// <param name="fileCount">処理するファイル数</param>
+    /// <returns>最適な並列度</returns>
+    private static int CalculateOptimalParallelism(int fileCount)
+    {
+        var processorCount = Environment.ProcessorCount;
+        
+        // 小さなファイル数の場合は並列度を制限
+        if (fileCount <= 4)
+            return Math.Min(fileCount, processorCount);
+        
+        // 中程度のファイル数の場合はCPUコア数を使用
+        if (fileCount <= 20)
+            return processorCount;
+        
+        // 大量のファイルの場合は少し並列度を上げる
+        return Math.Min(processorCount * 2, fileCount);
+    }
+
+    /// <summary>
+    /// ArrayPoolを使用した動的配列管理
+    /// </summary>
+    private static (MatchResult[] array, int newSize) ResizeArrayIfNeeded(MatchResult[] currentArray, int currentCount, int currentSize, int maxCount)
+    {
+        // 最大数制限がある場合は現在の配列を使用
+        if (maxCount > 0 && currentCount >= maxCount)
+            return (currentArray, currentSize);
+        
+        // 配列がフルになった場合は拡張
+        if (currentCount >= currentSize)
+        {
+            var newSize = Math.Min(currentSize * 2, maxCount > 0 ? maxCount : currentSize * 2);
+            var newArray = _matchPool.Rent(newSize);
+            Array.Copy(currentArray, newArray, currentCount);
+            _matchPool.Return(currentArray, clearArray: true);
+            return (newArray, newSize);
+        }
+        
+        return (currentArray, currentSize);
+    }
+
     private async Task<IEnumerable<string>> ExpandFilesAsync(IOptionContext options, CancellationToken cancellationToken)
     {
         var files = new List<string>();
@@ -108,7 +155,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             
             if (isRecursive)
             {
-                var expandedFiles = await ExpandRecursiveAsync(filePattern, options, cancellationToken);
+                var expandedFiles = await ExpandRecursiveAsync(filePattern, options, cancellationToken).ConfigureAwait(false);
                 files.AddRange(expandedFiles);
             }
             else if (_fileSystem.FileExists(filePattern))
@@ -126,19 +173,17 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         return files.Distinct();
     }
 
-    private Task<IEnumerable<string>> ExpandRecursiveAsync(string path, IOptionContext options, CancellationToken cancellationToken)
+    private async Task<IEnumerable<string>> ExpandRecursiveAsync(string path, IOptionContext options, CancellationToken cancellationToken)
     {
         var files = new List<string>();
         
         if (_fileSystem.DirectoryExists(path))
         {
             var searchOption = SearchOption.AllDirectories;
-            var allFiles = _fileSystem.EnumerateFiles(path, "*", searchOption);
             
-            foreach (var file in allFiles)
+            // 非同期ファイル列挙を使用してメモリ効率を向上
+            await foreach (var file in _fileSystem.EnumerateFilesAsync(path, "*", searchOption, cancellationToken).ConfigureAwait(false))
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                
                 if (ShouldIncludeFile(file, options))
                 {
                     files.Add(file);
@@ -150,7 +195,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             files.Add(path);
         }
         
-        return Task.FromResult<IEnumerable<string>>(files);
+        return files;
     }
 
     private IEnumerable<string> ExpandGlobPattern(string pattern)
@@ -518,104 +563,29 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         {
             if (needsContext)
             {
-                return await ProcessStandardInputWithOptimizedContextAsync(strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken);
+                return await ProcessStandardInputWithOptimizedContextAsync(strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                return await ProcessStandardInputOptimizedAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken);
+                return await ProcessStandardInputOptimizedAsync(strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
             }
         }
         
         // コンテキストが必要な場合は最適化された専用の処理を使用
         if (needsContext)
         {
-            return await ProcessFileWithOptimizedContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken);
+            return await ProcessFileWithOptimizedContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken).ConfigureAwait(false);
         }
         
-        // ArrayPoolを使用してメモリ効率を向上
-        var estimatedSize = maxCount ?? 1000;
-        var rentedArray = _matchPool.Rent(estimatedSize);
-        var actualCount = 0;
-        var hasMaxCountLimit = maxCount.HasValue;
-        var maxCountValue = maxCount ?? int.MaxValue;
+        // 小さなファイルの場合は高速パスを使用
+        var fileInfo = _fileSystem.GetFileInfo(filePath);
+        if (fileInfo.Length <= 4096) // 4KB以下
+        {
+            return await ProcessSmallFileAsync(filePath, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
+        }
         
-        try
-        {
-            var lineNumber = 0;
-            
-            // ファイルサイズに応じたバッファサイズの動的調整
-            var fileInfo = _fileSystem.GetFileInfo(filePath);
-            var bufferSize = GetOptimalBufferSize(fileInfo.Length);
-            
-            // ファイルの処理（大きなファイルでもメモリ効率的）
-            using var fileStream = _fileSystem.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize, FileOptions.SequentialScan);
-            using var reader = new StreamReader(fileStream, Encoding.UTF8);
-            
-            string? line;
-            
-            // 条件分岐の最適化: 反転マッチと通常マッチで処理パスを分離
-            if (invertMatch)
-            {
-                // 反転マッチ専用の処理パス
-                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-                {
-                    lineNumber++;
-                    cancellationToken.ThrowIfCancellationRequested();
-                    
-                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                    
-                    // 反転マッチの場合は存在確認のみ行う（戦略パターン使用）
-                    var hasMatches = !lineMatches.Any();
-                    if (hasMatches)
-                    {
-                        // 反転マッチの場合は行全体をマッチとする（メモリ効率的）
-                        var lineMemory = line.AsMemory();
-                        rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length);
-                        
-                        // 最大マッチ数の制限チェック（最適化）
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
-                            break;
-                    }
-                }
-            }
-            else
-            {
-                // 通常マッチ専用の処理パス（戦略パターン使用）
-                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
-                {
-                    lineNumber++;
-                    cancellationToken.ThrowIfCancellationRequested();
-                    
-                    var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
-                    
-                    // 通常マッチの場合は実際のマッチを処理
-                    foreach (var match in lineMatches)
-                    {
-                        rentedArray[actualCount++] = match;
-                        
-                        // 最大マッチ数の制限チェック（最適化）
-                        if (hasMaxCountLimit && actualCount >= maxCountValue)
-                            goto exitLoop;
-                    }
-                }
-            }
-            
-            exitLoop:
-            
-            // 最終的に必要な分だけコピーしてReadOnlyListを作成
-            var results = new MatchResult[actualCount];
-            Array.Copy(rentedArray, results, actualCount);
-            
-            return new FileResult(filePath, results.AsReadOnly(), actualCount);
-        }
-        catch (Exception ex)
-        {
-            return new FileResult(filePath, [], 0, true, ex.Message);
-        }
-        finally
-        {
-            _matchPool.Return(rentedArray, clearArray: true);
-        }
+        // 通常の処理（IAsyncEnumerableを使用したストリーミング）
+        return await ProcessFileStreamingAsync(filePath, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
     }
 
     // 古いメソッドは削除されました - ProcessFileWithOptimizedContextAsync を使用してください
@@ -634,7 +604,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             const long largeFileThreshold = 50 * 1024 * 1024; // 50MB
             if (fileInfo.Length > largeFileThreshold)
             {
-                return await ProcessLargeFileWithStreamingContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken);
+                return await ProcessLargeFileWithStreamingContextAsync(filePath, strategy, options, pattern, invertMatch, maxCount, contextBefore, contextAfter, cancellationToken).ConfigureAwait(false);
             }
             
             // 通常サイズのファイルは全行読み込み
@@ -647,7 +617,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             var lineNumber = 0;
             string? line;
             
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
             {
                 allLines.Add(line);
                 lineNumber++;
@@ -730,7 +700,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             var lineNumber = 0;
             string? line;
             
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
             {
                 lineNumber++;
                 cancellationToken.ThrowIfCancellationRequested();
@@ -904,7 +874,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             
             if (invertMatch)
             {
-                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
                 {
                     lineNumber++;
                     cancellationToken.ThrowIfCancellationRequested();
@@ -923,7 +893,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             }
             else
             {
-                while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+                while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
                 {
                     lineNumber++;
                     cancellationToken.ThrowIfCancellationRequested();
@@ -971,7 +941,7 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
             var lineNumber = 0;
             string? line;
             
-            while ((line = await reader.ReadLineAsync(cancellationToken)) != null)
+            while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) != null)
             {
                 allLines.Add(line);
                 lineNumber++;
@@ -1022,6 +992,197 @@ public class ParallelGrepEngine(IMatchStrategyFactory strategyFactory, IFileSyst
         catch (Exception ex)
         {
             return new FileResult("(standard input)", [], 0, true, ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// IAsyncEnumerableを使用したストリーミング処理（ReadOnlyMemoryによるゼロコピー最適化）
+    /// </summary>
+    private async Task<FileResult> ProcessFileStreamingAsync(string filePath, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
+    {
+        var estimatedSize = maxCount ?? 1000;
+        var rentedArray = _matchPool.Rent(estimatedSize);
+        var actualCount = 0;
+        var hasMaxCountLimit = maxCount.HasValue;
+        var maxCountValue = maxCount ?? int.MaxValue;
+        
+        try
+        {
+            var lineNumber = 0;
+            
+            // IAsyncEnumerableを使用してReadOnlyMemoryでゼロコピー処理
+            await foreach (var lineMemory in _fileSystem.ReadLinesAsMemoryAsync(filePath, cancellationToken).ConfigureAwait(false))
+            {
+                lineNumber++;
+                cancellationToken.ThrowIfCancellationRequested();
+                
+                // 必要な場合のみ文字列変換を最小限に抑制
+                var lineMatches = strategy.FindMatches(lineMemory.ToString(), pattern, options, filePath, lineNumber);
+                
+                if (invertMatch)
+                {
+                    if (!lineMatches.Any())
+                    {
+                        // ゼロコピー: ReadOnlyMemoryから直接MatchResultを作成
+                        rentedArray[actualCount++] = new MatchResult(filePath, lineNumber, lineMemory.ToString(), lineMemory, 0, lineMemory.Length);
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            break;
+                    }
+                }
+                else
+                {
+                    foreach (var match in lineMatches)
+                    {
+                        rentedArray[actualCount++] = match;
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            goto exitLoop;
+                    }
+                }
+            }
+            
+            exitLoop:
+            
+            var results = new MatchResult[actualCount];
+            Array.Copy(rentedArray, results, actualCount);
+            
+            return new FileResult(filePath, results.AsReadOnly(), actualCount);
+        }
+        catch (Exception ex)
+        {
+            return new FileResult(filePath, [], 0, true, ex.Message);
+        }
+        finally
+        {
+            _matchPool.Return(rentedArray, clearArray: true);
+        }
+    }
+
+    /// <summary>
+    /// 標準入力のストリーミング処理
+    /// </summary>
+    private async Task<FileResult> ProcessStandardInputStreamingAsync(IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
+    {
+        var estimatedSize = maxCount ?? 1000;
+        var rentedArray = _matchPool.Rent(estimatedSize);
+        var actualCount = 0;
+        var lineNumber = 0;
+        var hasMaxCountLimit = maxCount.HasValue;
+        var maxCountValue = maxCount ?? int.MaxValue;
+        const string fileName = "(standard input)";
+        
+        try
+        {
+            await foreach (var lineMemory in _fileSystem.ReadStandardInputAsMemoryAsync(cancellationToken).ConfigureAwait(false))
+            {
+                lineNumber++;
+                cancellationToken.ThrowIfCancellationRequested();
+                
+                var line = lineMemory.ToString();
+                var lineMatches = strategy.FindMatches(line, pattern, options, fileName, lineNumber);
+                
+                if (invertMatch)
+                {
+                    if (!lineMatches.Any())
+                    {
+                        rentedArray[actualCount++] = new MatchResult(fileName, lineNumber, line, lineMemory, 0, lineMemory.Length);
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            break;
+                    }
+                }
+                else
+                {
+                    foreach (var match in lineMatches)
+                    {
+                        rentedArray[actualCount++] = match;
+                        
+                        if (hasMaxCountLimit && actualCount >= maxCountValue)
+                            goto exitLoop;
+                    }
+                }
+            }
+            
+            exitLoop:
+            
+            var results = new MatchResult[actualCount];
+            Array.Copy(rentedArray, results, actualCount);
+            
+            return new FileResult(fileName, results.AsReadOnly(), actualCount);
+        }
+        catch (Exception ex)
+        {
+            return new FileResult(fileName, [], 0, true, ex.Message);
+        }
+        finally
+        {
+            _matchPool.Return(rentedArray, clearArray: true);
+        }
+    }
+
+    /// <summary>
+    /// 小さなファイル用の高速処理パス（ValueTaskを使用）
+    /// </summary>
+    private async ValueTask<FileResult> ProcessSmallFileAsync(string filePath, IMatchStrategy strategy, IOptionContext options, string pattern, bool invertMatch, int? maxCount, CancellationToken cancellationToken)
+    {
+        const int smallFileThreshold = 1024 * 4; // 4KB
+        
+        var fileInfo = _fileSystem.GetFileInfo(filePath);
+        if (fileInfo.Length > smallFileThreshold)
+        {
+            // 通常の処理にフォールバック
+            return await ProcessFileStreamingAsync(filePath, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
+        }
+        
+        try
+        {
+            // 小さなファイルは一度に全て読み込み
+            using var fileStream = _fileSystem.OpenFile(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, 1024, FileOptions.SequentialScan);
+            using var reader = new StreamReader(fileStream, bufferSize: 1024);
+            
+            var content = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+            var lines = content.Split('\n', StringSplitOptions.None);
+            
+            var matches = new List<MatchResult>();
+            var hasMaxCountLimit = maxCount.HasValue;
+            var maxCountValue = maxCount ?? int.MaxValue;
+            
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                var lineNumber = i + 1;
+                
+                if (line.EndsWith('\r'))
+                    line = line[..^1]; // Remove trailing carriage return
+                
+                var lineMatches = strategy.FindMatches(line, pattern, options, filePath, lineNumber);
+                
+                if (invertMatch)
+                {
+                    if (!lineMatches.Any())
+                    {
+                        var lineMemory = line.AsMemory();
+                        matches.Add(new MatchResult(filePath, lineNumber, line, lineMemory, 0, line.Length));
+                        
+                        if (hasMaxCountLimit && matches.Count >= maxCountValue)
+                            break;
+                    }
+                }
+                else
+                {
+                    matches.AddRange(lineMatches);
+                    
+                    if (hasMaxCountLimit && matches.Count >= maxCountValue)
+                        break;
+                }
+            }
+            
+            return new FileResult(filePath, matches.AsReadOnly(), matches.Count);
+        }
+        catch (Exception ex)
+        {
+            return new FileResult(filePath, [], 0, true, ex.Message);
         }
     }
 }

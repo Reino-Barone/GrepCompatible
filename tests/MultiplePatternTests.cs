@@ -98,6 +98,10 @@ namespace GrepCompatible.Tests
             _mockFileSystem.Setup(fs => fs.EnumerateFiles(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SearchOption>()))
                 .Returns(files);
             
+            // 非同期版のEnumerateFilesAsyncもセットアップ
+            _mockFileSystem.Setup(fs => fs.EnumerateFilesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SearchOption>(), It.IsAny<CancellationToken>()))
+                .Returns(ToAsyncEnumerable(files));
+            
             foreach (var file in files)
             {
                 _mockFileSystem.Setup(fs => fs.FileExists(file)).Returns(true);
@@ -114,6 +118,16 @@ namespace GrepCompatible.Tests
             }
 
             _mockFileSystem.Setup(fs => fs.DirectoryExists(It.IsAny<string>())).Returns(true);
+        }
+        
+        // 配列をIAsyncEnumerableに変換するヘルパーメソッド
+        private static async IAsyncEnumerable<string> ToAsyncEnumerable(string[] items)
+        {
+            foreach (var item in items)
+            {
+                await Task.Yield(); // 非同期コンテキストを維持
+                yield return item;
+            }
         }
 
         private void SetupMockOptions(string searchPattern, string[]? includePatterns = null, string[]? excludePatterns = null)

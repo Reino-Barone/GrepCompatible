@@ -11,7 +11,7 @@ Console.CancelKeyPress += (_, e) =>
 try
 {
     var app = GrepApplication.CreateDefault();
-    var exitCode = await app.RunAsync(args, cts.Token);
+    var exitCode = await app.RunAsync(args, cts.Token).ConfigureAwait(false);
     Environment.ExitCode = exitCode;
 }
 catch (OperationCanceledException)
@@ -20,6 +20,6 @@ catch (OperationCanceledException)
 }
 catch (Exception ex)
 {
-    await Console.Error.WriteLineAsync($"Fatal error: {ex.Message}");
+    await Console.Error.WriteLineAsync($"Fatal error: {ex.Message}").ConfigureAwait(false);
     Environment.ExitCode = 2;
 }
