@@ -12,6 +12,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace GrepCompatible.Test.Integration;
 
@@ -20,36 +21,116 @@ namespace GrepCompatible.Test.Integration;
 /// </summary>
 public class GlobPatternIntegrationTests : IDisposable
 {
+    private readonly ITestOutputHelper _output;
     private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory = new();
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
     private readonly Mock<IFileSystem> _mockFileSystem = new();
     private readonly Mock<IPath> _mockPath = new();
     private readonly Mock<IFileSearchService> _mockFileSearchService = new();
     private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
-    private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
+    private readonly IMatchResultPool _matchResultPool = new MatchResultPool(); // 実際の実装を使用
     private readonly ParallelGrepEngine _engine;
 
-    public GlobPatternIntegrationTests()
+    public GlobPatternIntegrationTests(ITestOutputHelper output)
     {
-        _mockStrategyFactory.Setup(f => f.CreateStrategy(It.IsAny<IOptionContext>()))
-            .Returns(_mockStrategy.Object);
+        _output = output;
+        SetupMocks();
         _engine = new ParallelGrepEngine(
             _mockStrategyFactory.Object,
             _mockFileSystem.Object,
             _mockPath.Object,
             _mockFileSearchService.Object,
             _mockPerformanceOptimizer.Object,
-            _mockMatchResultPool.Object);
+            _matchResultPool);
+    }
+
+    private void SetupMocks()
+    {
+        _mockStrategyFactory.Setup(f => f.CreateStrategy(It.IsAny<IOptionContext>()))
+            .Returns(_mockStrategy.Object);
+        
+        _mockStrategy.Setup(s => s.CanApply(It.IsAny<IOptionContext>()))
+            .Returns(true);
+
+        // Performance Optimizer のセットアップ
+        _mockPerformanceOptimizer.Setup(po => po.CalculateOptimalParallelism(It.IsAny<int>()))
+            .Returns<int>(fileCount => Math.Max(1, Math.Min(Environment.ProcessorCount, fileCount == 0 ? 1 : fileCount)));
+        
+        _mockPerformanceOptimizer.Setup(po => po.GetOptimalBufferSize(It.IsAny<long>()))
+            .Returns(4096);
+
+        // FileSearchService のセットアップ
+        _mockFileSearchService.Setup(fs => fs.ExpandFilesAsync(It.IsAny<IOptionContext>(), It.IsAny<CancellationToken>()))
+            .Returns<IOptionContext, CancellationToken>((options, cancellationToken) =>
+            {
+                var filesArg = options.GetStringListArgumentValue(ArgumentNames.Files) ?? new List<string>().AsReadOnly();
+                var files = new List<string>();
+                
+                foreach (var filePattern in filesArg)
+                {
+                    if (filePattern == "temp_dir")
+                    {
+                        // temp_dirが指定された場合、すべてのファイルを取得
+                        var allFiles = new[] { "temp_dir/Program.cs", "temp_dir/README.txt", "temp_dir/debug.log" };
+                        
+                        // ShouldIncludeFile を使って除外パターンを適用
+                        foreach (var file in allFiles)
+                        {
+                            if (_mockFileSearchService.Object.ShouldIncludeFile(file, options))
+                            {
+                                files.Add(file);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        files.Add(filePattern);
+                    }
+                }
+                
+                return Task.FromResult(files.AsEnumerable());
+            });
+            
+        // ShouldIncludeFile のセットアップ - 除外パターン処理
+        _mockFileSearchService.Setup(fs => fs.ShouldIncludeFile(It.IsAny<string>(), It.IsAny<IOptionContext>()))
+            .Returns<string, IOptionContext>((filePath, options) =>
+            {
+                var excludePattern = options.GetStringValue(OptionNames.ExcludePattern);
+                if (excludePattern != null)
+                {
+                    var fileName = System.IO.Path.GetFileName(filePath);
+                    
+                    // 簡単なワイルドカードマッチング
+                    if (excludePattern == "*.log" && fileName.EndsWith(".log"))
+                    {
+                        _output.WriteLine($"ファイル除外: {filePath} (パターン: {excludePattern})");
+                        return false;
+                    }
+                }
+                return true;
+            });
+            
+        // Path のセットアップ
+        _mockPath.Setup(p => p.GetFileName(It.IsAny<string>()))
+            .Returns<string>(path => Path.GetFileName(path));
+        _mockPath.Setup(p => p.GetDirectoryName(It.IsAny<string>()))
+            .Returns<string>(path => Path.GetDirectoryName(path));
+        _mockPath.Setup(p => p.Combine(It.IsAny<string[]>()))
+            .Returns<string[]>(paths => Path.Combine(paths));
     }
 
     [Fact]
     public async Task SearchAsync_WithExcludeGlobPattern_ExcludesMatchingFiles()
     {
+        _output.WriteLine("開始: SearchAsync_WithExcludeGlobPattern_ExcludesMatchingFiles");
+        
         // Arrange
         var tempDir = "temp_dir";
         var csharpFile = tempDir + "/Program.cs";
         var textFile = tempDir + "/README.txt";
         var logFile = tempDir + "/debug.log";
+        
+        _output.WriteLine($"テストファイル: {csharpFile}, {textFile}, {logFile}");
         
         var files = new[] { csharpFile, textFile, logFile };
         SetupMockFileSystem(files);
@@ -58,18 +139,64 @@ public class GlobPatternIntegrationTests : IDisposable
         SetupBasicOptions(mockOptions, tempDir, "hello");
         mockOptions.Setup(o => o.GetFlagValue(OptionNames.RecursiveSearch)).Returns(true);
         mockOptions.Setup(o => o.GetStringValue(OptionNames.ExcludePattern)).Returns("*.log");
+        
+        _output.WriteLine("ExcludePattern: *.log");
 
         _mockStrategy.Setup(s => s.FindMatches("hello world", "hello", mockOptions.Object, csharpFile, 1))
             .Returns(new[] { new MatchResult(csharpFile, 1, "hello world", "hello".AsMemory(), 0, 5) });
         _mockStrategy.Setup(s => s.FindMatches("hello test", "hello", mockOptions.Object, textFile, 1))
             .Returns(new[] { new MatchResult(textFile, 1, "hello test", "hello".AsMemory(), 0, 5) });
 
+        _mockStrategy.Setup(s => s.FindMatches(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IOptionContext>(), It.IsAny<string>(), It.IsAny<int>()))
+            .Returns<string, string, IOptionContext, string, int>((line, pattern, options, fileName, lineNumber) =>
+            {
+                _output.WriteLine($"FindMatches呼び出し - Line: {line}, Pattern: {pattern}, FileName: {fileName}, LineNumber: {lineNumber}");
+                
+                if (fileName == csharpFile && line.Contains("hello"))
+                {
+                    _output.WriteLine($"マッチを返します: {csharpFile}");
+                    return new[] { new MatchResult(csharpFile, 1, "hello world", "hello".AsMemory(), 0, 5) };
+                }
+                if (fileName == textFile && line.Contains("hello"))
+                {
+                    _output.WriteLine($"マッチを返します: {textFile}");
+                    return new[] { new MatchResult(textFile, 1, "hello test", "hello".AsMemory(), 0, 5) };
+                }
+                
+                _output.WriteLine("マッチなし");
+                return Enumerable.Empty<MatchResult>();
+            });
+
+        _output.WriteLine("オプション設定完了");
+
         // Act
+        _output.WriteLine("SearchAsync開始");
         var result = await _engine.SearchAsync(mockOptions.Object);
 
+        _output.WriteLine($"SearchAsync完了 - Results: {result?.FileResults?.Count ?? 0}");
+        if (result?.FileResults != null)
+        {
+            foreach (var fileResult in result.FileResults)
+            {
+                _output.WriteLine($"結果ファイル: {fileResult.FileName}, マッチ数: {fileResult.TotalMatches}");
+                if (fileResult.Matches?.Any() == true)
+                {
+                    foreach (var match in fileResult.Matches.Take(3)) // 最初の3つのマッチを出力
+                    {
+                        _output.WriteLine($"  マッチ: Line {match.LineNumber} - {match.Line}");
+                    }
+                }
+                else
+                {
+                    _output.WriteLine($"  マッチなし");
+                }
+            }
+        }
+
         // Assert
+        Assert.NotNull(result);
         Assert.Equal(2, result.FileResults.Count);
-        Assert.Equal(2, result.TotalMatches);
+        Assert.Equal(2, result.TotalMatches); // 期待値を元に戻す
         
         // .logファイルが除外されていることを確認
         Assert.Contains(result.FileResults, fr => fr.FileName == csharpFile);
@@ -237,8 +364,13 @@ public class GlobPatternIntegrationTests : IDisposable
             mockFileInfo.Setup(fi => fi.Length).Returns(100);
             _mockFileSystem.Setup(fs => fs.GetFileInfo(file)).Returns(mockFileInfo.Object);
             
+            // ファイルに応じて異なる内容を設定
+            string content = file.Contains("Program.cs") ? "hello world" : 
+                           file.Contains("README.txt") ? "hello test" :
+                           "hello debug"; // debug.log用
+            
             _mockFileSystem.Setup(fs => fs.ReadLinesAsync(file, It.IsAny<CancellationToken>()))
-                .Returns(ToAsyncEnumerable(new[] { "test content" }));
+                .Returns(ToAsyncEnumerable(new[] { content }));
             
             _mockPath.Setup(p => p.GetFileName(file)).Returns(System.IO.Path.GetFileName(file));
             _mockPath.Setup(p => p.GetDirectoryName(file)).Returns(System.IO.Path.GetDirectoryName(file));

@@ -123,7 +123,7 @@ public async Task<SearchResult> SearchAsync(IOptionContext options, Cancellation
         
         // 小さなファイルの場合は高速パスを使用
         var fileInfo = _fileSystem.GetFileInfo(filePath);
-        if (fileInfo.Length <= 4096) // 4KB以下
+        if (fileInfo?.Length <= 4096) // 4KB以下
         {
             return await ProcessSmallFileAsync(filePath, strategy, options, pattern, invertMatch, maxCount, cancellationToken).ConfigureAwait(false);
         }
