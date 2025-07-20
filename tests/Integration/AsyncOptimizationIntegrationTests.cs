@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Threading;
 using System;
+using System.IO;
 using GrepCompatible.Abstractions;
 using GrepCompatible.Core;
 using GrepCompatible.Models;
@@ -11,6 +12,7 @@ using GrepCompatible.Strategies;
 using GrepCompatible.Test.Infrastructure;
 using GrepCompatible.CommandLine;
 using GrepCompatible.Constants;
+using Moq;
 using Xunit;
 
 namespace GrepCompatible.Test.Integration;
@@ -21,16 +23,27 @@ namespace GrepCompatible.Test.Integration;
 public class AsyncOptimizationIntegrationTests
 {
     private readonly IMatchStrategyFactory _strategyFactory;
-    private readonly MockPathHelper _pathHelper;
+    private readonly Mock<IPath> _pathHelper;
     private readonly IPerformanceOptimizer _performanceOptimizer;
     private readonly IMatchResultPool _matchResultPool;
 
     public AsyncOptimizationIntegrationTests()
     {
         _strategyFactory = new MatchStrategyFactory();
-        _pathHelper = new MockPathHelper();
+        _pathHelper = new Mock<IPath>();
+        SetupPathHelper();
         _performanceOptimizer = new PerformanceOptimizer();
         _matchResultPool = new MatchResultPool();
+    }
+
+    private void SetupPathHelper()
+    {
+        _pathHelper.Setup(p => p.GetDirectoryName(It.IsAny<string>()))
+            .Returns<string>(path => Path.GetDirectoryName(path));
+        _pathHelper.Setup(p => p.GetFileName(It.IsAny<string>()))
+            .Returns<string>(path => Path.GetFileName(path));
+        _pathHelper.Setup(p => p.Combine(It.IsAny<string[]>()))
+            .Returns<string[]>(paths => Path.Combine(paths));
     }
 
     /// <summary>
@@ -38,8 +51,8 @@ public class AsyncOptimizationIntegrationTests
     /// </summary>
     private ParallelGrepEngine CreateEngine(IFileSystem fileSystem)
     {
-        var fileSearchService = new FileSearchService(fileSystem, _pathHelper);
-        return new ParallelGrepEngine(_strategyFactory, fileSystem, _pathHelper, fileSearchService, _performanceOptimizer, _matchResultPool);
+        var fileSearchService = new FileSearchService(fileSystem, _pathHelper.Object);
+        return new ParallelGrepEngine(_strategyFactory, fileSystem, _pathHelper.Object, fileSearchService, _performanceOptimizer, _matchResultPool);
     }
 
     private DynamicOptions CreateOptions(string pattern, params string[] files)

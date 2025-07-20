@@ -23,7 +23,7 @@ public class MockFileSystemIntegrationTests
     private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory = new();
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
     private readonly Mock<IFileSystem> _mockFileSystem = new();
-    private readonly MockPathHelper _mockPathHelper = new();
+    private readonly Mock<IPath> _mockPathHelper = new();
     private readonly Mock<IFileSearchService> _mockFileSearchService = new();
     private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
     private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
@@ -31,15 +31,26 @@ public class MockFileSystemIntegrationTests
 
     public MockFileSystemIntegrationTests()
     {
+        SetupPathHelper();
         _mockStrategyFactory.Setup(f => f.CreateStrategy(It.IsAny<IOptionContext>()))
             .Returns(_mockStrategy.Object);
         _engine = new ParallelGrepEngine(
             _mockStrategyFactory.Object,
             _mockFileSystem.Object,
-            _mockPathHelper,
+            _mockPathHelper.Object,
             _mockFileSearchService.Object,
             _mockPerformanceOptimizer.Object,
             _mockMatchResultPool.Object);
+    }
+
+    private void SetupPathHelper()
+    {
+        _mockPathHelper.Setup(p => p.GetDirectoryName(It.IsAny<string>()))
+            .Returns<string>(path => Path.GetDirectoryName(path));
+        _mockPathHelper.Setup(p => p.GetFileName(It.IsAny<string>()))
+            .Returns<string>(path => Path.GetFileName(path));
+        _mockPathHelper.Setup(p => p.Combine(It.IsAny<string[]>()))
+            .Returns<string[]>(paths => Path.Combine(paths));
     }
 
     [Fact]
@@ -60,7 +71,7 @@ public class MockFileSystemIntegrationTests
         var engine = new ParallelGrepEngine(
             _mockStrategyFactory.Object,
             fileSystem,
-            _mockPathHelper,
+            _mockPathHelper.Object,
             _mockFileSearchService.Object,
             _mockPerformanceOptimizer.Object,
             _mockMatchResultPool.Object);
@@ -175,7 +186,7 @@ public class MockFileSystemIntegrationTests
         var engine = new ParallelGrepEngine(
             _mockStrategyFactory.Object,
             fileSystem,
-            _mockPathHelper,
+            _mockPathHelper.Object,
             _mockFileSearchService.Object,
             _mockPerformanceOptimizer.Object,
             _mockMatchResultPool.Object);
