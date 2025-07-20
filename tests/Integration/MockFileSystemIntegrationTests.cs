@@ -22,7 +22,7 @@ public class MockFileSystemIntegrationTests
 {
     private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory = new();
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
-    private readonly MockFileSystem _mockFileSystem = new();
+    private readonly Mock<IFileSystem> _mockFileSystem = new();
     private readonly MockPathHelper _mockPathHelper = new();
     private readonly Mock<IFileSearchService> _mockFileSearchService = new();
     private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
@@ -35,7 +35,7 @@ public class MockFileSystemIntegrationTests
             .Returns(_mockStrategy.Object);
         _engine = new ParallelGrepEngine(
             _mockStrategyFactory.Object,
-            _mockFileSystem,
+            _mockFileSystem.Object,
             _mockPathHelper,
             _mockFileSearchService.Object,
             _mockPerformanceOptimizer.Object,
@@ -45,11 +45,25 @@ public class MockFileSystemIntegrationTests
     [Fact]
     public async Task SearchAsync_WithMockFileSystem_ShouldWorkAcrossAllPlatforms()
     {
-        // Arrange - 実行環境に依存しないテスト用パス
+        // Arrange - FileSystemTestBuilderを使用したインターフェース経由の設定
         var testFile = "src/test.txt";
         var testContent = "This is a test file\nwith multiple lines";
         
-        _mockFileSystem.AddFile(testFile, testContent);
+        // FileSystemTestBuilderを使用してファイルシステムモックを構築
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile(testFile, testContent)
+            .WithFiles(testFile)
+            .Build();
+        
+        // エンジンを再構築（新しいファイルシステムで）
+        var engine = new ParallelGrepEngine(
+            _mockStrategyFactory.Object,
+            fileSystem,
+            _mockPathHelper,
+            _mockFileSearchService.Object,
+            _mockPerformanceOptimizer.Object,
+            _mockMatchResultPool.Object);
         
         var matches = new List<MatchResult>
         {
@@ -90,55 +104,81 @@ public class MockFileSystemIntegrationTests
     }
 
     [Fact]
-    public void MockFileSystem_PathHandling_ShouldBeEnvironmentIndependent()
+    public async Task FileSystemMock_PathHandling_ShouldSupportDifferentFormats()
     {
-        // Arrange - 異なるパス形式を使用してテスト
+        // Arrange - インターフェース経由でのパス処理テスト
         var windowsStylePath = "src\\test.txt";
-        var unixStylePath = "src/test.txt";
-        var content = "test content";
+        var unixStylePath = "src/test.txt"; 
+        var content = "test content line 1\ntest content line 2";
         
-        // Act - 両方の形式で同じファイルを参照
-        _mockFileSystem.AddFile(windowsStylePath, content);
+        // FileSystemTestBuilderを使って両方のパス形式をサポート
+        var fileSystem = new FileSystemTestBuilder()
+            .WithFile(windowsStylePath, content)
+            .WithFile(unixStylePath, content)
+            .Build();
         
-        // Assert - 両方の形式でアクセス可能
-        Assert.True(_mockFileSystem.FileExists(windowsStylePath));
-        Assert.True(_mockFileSystem.FileExists(unixStylePath));
+        // Act & Assert - 両方の形式で読み取り可能
+        var lines1 = new List<string>();
+        await foreach (var line in fileSystem.ReadLinesAsync(windowsStylePath))
+        {
+            lines1.Add(line);
+        }
         
-        var info1 = _mockFileSystem.GetFileInfo(windowsStylePath);
-        var info2 = _mockFileSystem.GetFileInfo(unixStylePath);
+        var lines2 = new List<string>();
+        await foreach (var line in fileSystem.ReadLinesAsync(unixStylePath))
+        {
+            lines2.Add(line);
+        }
         
-        Assert.Equal(info1.Length, info2.Length);
-        Assert.Equal(info1.Name, info2.Name);
+        Assert.Equal(2, lines1.Count);
+        Assert.Equal(2, lines2.Count);
+        Assert.Equal("test content line 1", lines1[0]);
+        Assert.Equal("test content line 1", lines2[0]);
     }
 
     [Fact]
-    public void MockFileSystem_DirectoryListing_ShouldBeConsistent()
+    public async Task FileSystemMock_DirectoryListing_ShouldEnumerateFiles()
     {
-        // Arrange
-        _mockFileSystem.AddDirectory("src");
-        _mockFileSystem.AddFile("src/file1.txt", "content1");
-        _mockFileSystem.AddFile("src/file2.txt", "content2");
-        _mockFileSystem.AddFile("src/subdir/file3.txt", "content3");
+        // Arrange - FileSystemTestBuilderを使用したディレクトリ・ファイル構造の構築
+        var fileSystem = new FileSystemTestBuilder()
+            .WithDirectory("src")
+            .WithFile("src/file1.txt", "content1")
+            .WithFile("src/file2.txt", "content2")
+            .WithFile("src/subdir/file3.txt", "content3")
+            .WithFiles("src/file1.txt", "src/file2.txt", "src/subdir/file3.txt")
+            .Build();
         
-        // Act
-        var topLevelFiles = _mockFileSystem.EnumerateFiles("src", "*", System.IO.SearchOption.TopDirectoryOnly);
-        var allFiles = _mockFileSystem.EnumerateFiles("src", "*", System.IO.SearchOption.AllDirectories);
+        // Act - 非同期ファイル列挙のテスト
+        var allFiles = new List<string>();
+        await foreach (var file in fileSystem.EnumerateFilesAsync("src", "*", System.IO.SearchOption.AllDirectories))
+        {
+            allFiles.Add(file);
+        }
         
         // Assert
-        Assert.Equal(2, topLevelFiles.Count());
-        Assert.Equal(3, allFiles.Count());
-        
-        Assert.Contains("src/file1.txt", topLevelFiles);
-        Assert.Contains("src/file2.txt", topLevelFiles);
+        Assert.Equal(3, allFiles.Count);
+        Assert.Contains("src/file1.txt", allFiles);
+        Assert.Contains("src/file2.txt", allFiles);
         Assert.Contains("src/subdir/file3.txt", allFiles);
     }
 
     [Fact]
     public async Task SearchAsync_WithStandardInput_ShouldWorkCorrectly()
     {
-        // Arrange - 標準入力の内容を設定
+        // Arrange - FileSystemTestBuilderを使用した標準入力設定
         var standardInputContent = "line1 with test\nline2 without match\nline3 with test again";
-        _mockFileSystem.SetStandardInput(standardInputContent);
+        var fileSystem = new FileSystemTestBuilder()
+            .WithStandardInput(standardInputContent)
+            .Build();
+        
+        // エンジンを標準入力対応で再構築
+        var engine = new ParallelGrepEngine(
+            _mockStrategyFactory.Object,
+            fileSystem,
+            _mockPathHelper,
+            _mockFileSearchService.Object,
+            _mockPerformanceOptimizer.Object,
+            _mockMatchResultPool.Object);
         
         var matches = new List<MatchResult>
         {

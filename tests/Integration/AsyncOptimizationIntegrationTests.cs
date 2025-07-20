@@ -21,22 +21,25 @@ namespace GrepCompatible.Test.Integration;
 public class AsyncOptimizationIntegrationTests
 {
     private readonly IMatchStrategyFactory _strategyFactory;
-    private readonly MockFileSystem _fileSystem;
     private readonly MockPathHelper _pathHelper;
-    private readonly IFileSearchService _fileSearchService;
     private readonly IPerformanceOptimizer _performanceOptimizer;
     private readonly IMatchResultPool _matchResultPool;
-    private readonly ParallelGrepEngine _engine;
 
     public AsyncOptimizationIntegrationTests()
     {
         _strategyFactory = new MatchStrategyFactory();
-        _fileSystem = new MockFileSystem();
         _pathHelper = new MockPathHelper();
-        _fileSearchService = new FileSearchService(_fileSystem, _pathHelper);
         _performanceOptimizer = new PerformanceOptimizer();
         _matchResultPool = new MatchResultPool();
-        _engine = new ParallelGrepEngine(_strategyFactory, _fileSystem, _pathHelper, _fileSearchService, _performanceOptimizer, _matchResultPool);
+    }
+
+    /// <summary>
+    /// テスト用のParallelGrepEngineを指定のファイルシステムで構築
+    /// </summary>
+    private ParallelGrepEngine CreateEngine(IFileSystem fileSystem)
+    {
+        var fileSearchService = new FileSearchService(fileSystem, _pathHelper);
+        return new ParallelGrepEngine(_strategyFactory, fileSystem, _pathHelper, fileSearchService, _performanceOptimizer, _matchResultPool);
     }
 
     private DynamicOptions CreateOptions(string pattern, params string[] files)
@@ -85,12 +88,16 @@ public class AsyncOptimizationIntegrationTests
     {
         // Arrange
         var testContent = "line1\ntest line\nline3\ntest again\nline5";
-        _fileSystem.AddFile("test.txt", testContent);
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile("test.txt", testContent)
+            .Build();
 
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("test", "test.txt");
 
         // Act
-        var result = await _engine.SearchAsync(options);
+        var result = await engine.SearchAsync(options);
 
         // Assert
         Assert.True(result.IsOverallSuccess);
@@ -128,12 +135,16 @@ public class AsyncOptimizationIntegrationTests
             }
         }
         
-        _fileSystem.AddFile("large.txt", sb.ToString());
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile("large.txt", sb.ToString())
+            .Build();
 
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("match", "large.txt");
 
         // Act
-        var result = await _engine.SearchAsync(options);
+        var result = await engine.SearchAsync(options);
 
         // Assert
         Assert.True(result.IsOverallSuccess);
@@ -158,19 +169,23 @@ public class AsyncOptimizationIntegrationTests
     public async Task FileProcessing_WithMultipleFiles_ShouldUseAsyncParallelProcessing()
     {
         // Arrange
+        var fileSystemBuilder = new FileSystemTestBuilder();
         var files = new List<string>();
+        
         for (int i = 0; i < 10; i++)
         {
             var fileName = $"file{i}.txt";
             var content = $"line1\ntarget line in file {i}\nline3";
-            _fileSystem.AddFile(fileName, content);
+            fileSystemBuilder.WithFile(fileName, content);
             files.Add(fileName);
         }
 
+        var fileSystem = fileSystemBuilder.Build();
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("target", files.ToArray());
 
         // Act
-        var result = await _engine.SearchAsync(options);
+        var result = await engine.SearchAsync(options);
 
         // Assert
         Assert.True(result.IsOverallSuccess);
@@ -190,15 +205,19 @@ public class AsyncOptimizationIntegrationTests
     {
         // Arrange
         var largeContent = string.Join("\n", Enumerable.Range(0, 100000).Select(i => $"line {i}"));
-        _fileSystem.AddFile("huge.txt", largeContent);
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile("huge.txt", largeContent)
+            .Build();
 
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("line", "huge.txt");
 
         using var cts = new CancellationTokenSource();
         cts.CancelAfter(TimeSpan.FromMilliseconds(100)); // Short timeout but not too short
 
         // Act
-        var result = await _engine.SearchAsync(options, cts.Token);
+        var result = await engine.SearchAsync(options, cts.Token);
 
         // Assert
         // The operation should complete (even if cancelled) and return a result
@@ -213,13 +232,17 @@ public class AsyncOptimizationIntegrationTests
     {
         // Arrange
         var testContent = "line1\nline2\ntarget line\nline4\nline5";
-        _fileSystem.AddFile("context.txt", testContent);
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile("context.txt", testContent)
+            .Build();
 
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("target", "context.txt");
         AddOption(options, OptionNames.Context, 1); // 1 line before and after
 
         // Act
-        var result = await _engine.SearchAsync(options);
+        var result = await engine.SearchAsync(options);
 
         // Assert
         Assert.True(result.IsOverallSuccess);
@@ -244,13 +267,17 @@ public class AsyncOptimizationIntegrationTests
     {
         // Arrange
         var testContent = string.Join("\n", Enumerable.Range(0, 1000).Select(i => $"match line {i}"));
-        _fileSystem.AddFile("maxcount.txt", testContent);
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile("maxcount.txt", testContent)
+            .Build();
 
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("match", "maxcount.txt");
         AddOption(options, OptionNames.MaxCount, 5);
 
         // Act
-        var result = await _engine.SearchAsync(options);
+        var result = await engine.SearchAsync(options);
 
         // Assert
         Assert.True(result.IsOverallSuccess);
@@ -268,13 +295,17 @@ public class AsyncOptimizationIntegrationTests
     {
         // Arrange
         var testContent = "line1\nmatch line\nline3\nmatch again\nline5";
-        _fileSystem.AddFile("invert.txt", testContent);
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile("invert.txt", testContent)
+            .Build();
 
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("match", "invert.txt");
         AddOption(options, OptionNames.InvertMatch, true);
 
         // Act
-        var result = await _engine.SearchAsync(options);
+        var result = await engine.SearchAsync(options);
 
         // Assert
         Assert.True(result.IsOverallSuccess);
@@ -295,12 +326,16 @@ public class AsyncOptimizationIntegrationTests
     {
         // Arrange
         var testContent = string.Join("\n", Enumerable.Range(0, 1000).Select(i => $"content line {i}"));
-        _fileSystem.AddFile("memory.txt", testContent);
+        var fileSystemBuilder = new FileSystemTestBuilder();
+        var fileSystem = fileSystemBuilder
+            .WithFile("memory.txt", testContent)
+            .Build();
 
+        var engine = CreateEngine(fileSystem);
         var options = CreateOptions("content", "memory.txt");
 
         // Act
-        var result = await _engine.SearchAsync(options);
+        var result = await engine.SearchAsync(options);
 
         // Assert
         Assert.True(result.IsOverallSuccess);

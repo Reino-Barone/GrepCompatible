@@ -73,15 +73,15 @@ public class SimdPerformanceTests
     public async Task SingleCharSearchPerformanceTest(string pattern, bool ignoreCase)
     {
         var testData = GenerateTestFile(LargeFileLines);
-        var fileSystem = new MockFileSystem();
+        var fileSystem = new FileSystemTestBuilder()
+            .WithFile("test.txt", testData)
+            .Build();
+        
         var strategyFactory = new MatchStrategyFactory();
         var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
         var performanceOptimizer = new PerformanceOptimizer();
         var matchResultPool = new MatchResultPool();
         var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper(), fileSearchService, performanceOptimizer, matchResultPool);
-        
-        // テストファイルを追加
-        fileSystem.AddFile("test.txt", testData);
         
         // オプション設定
         var options = new DynamicOptions();
@@ -144,15 +144,15 @@ public class SimdPerformanceTests
     public async Task ShortPatternSearchPerformanceTest(string pattern, bool ignoreCase)
     {
         var testData = GenerateTestFile(LargeFileLines);
-        var fileSystem = new MockFileSystem();
+        var fileSystem = new FileSystemTestBuilder()
+            .WithFile("test.txt", testData)
+            .Build();
+        
         var strategyFactory = new MatchStrategyFactory();
         var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
         var performanceOptimizer = new PerformanceOptimizer();
         var matchResultPool = new MatchResultPool();
         var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper(), fileSearchService, performanceOptimizer, matchResultPool);
-        
-        // テストファイルを追加
-        fileSystem.AddFile("test.txt", testData);
         
         // オプション設定
         var options = new DynamicOptions();
@@ -209,11 +209,11 @@ public class SimdPerformanceTests
     public async Task SimdVsTraditionalStrategyComparison()
     {
         var testData = GenerateTestFile(LargeFileLines);
-        var fileSystem = new MockFileSystem();
-        var pathHelper = new PathHelper();
+        var fileSystem = new FileSystemTestBuilder()
+            .WithFile("test.txt", testData)
+            .Build();
         
-        // テストファイルを追加
-        fileSystem.AddFile("test.txt", testData);
+        var pathHelper = new PathHelper();
         
         // オプション設定
         var options = new DynamicOptions();
@@ -291,15 +291,15 @@ public class SimdPerformanceTests
     public async Task LargeDataMemoryEfficiencyTest()
     {
         var testData = GenerateTestFile(LargeFileLines * 5); // 5倍の大きなファイル
-        var fileSystem = new MockFileSystem();
+        var fileSystem = new FileSystemTestBuilder()
+            .WithFile("large_test.txt", testData)
+            .Build();
+        
         var strategyFactory = new MatchStrategyFactory();
         var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
         var performanceOptimizer = new PerformanceOptimizer();
         var matchResultPool = new MatchResultPool();
         var engine = new ParallelGrepEngine(strategyFactory, fileSystem, new PathHelper(), fileSearchService, performanceOptimizer, matchResultPool);
-        
-        // テストファイルを追加
-        fileSystem.AddFile("large_test.txt", testData);
         
         // オプション設定
         var options = new DynamicOptions();
