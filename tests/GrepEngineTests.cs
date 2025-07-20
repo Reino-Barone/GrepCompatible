@@ -10,6 +10,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -22,8 +23,8 @@ public class GrepEngineTests : IDisposable
     private readonly List<string> _tempFiles = [];
     private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory = new();
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
-    private readonly MockFileSystem _mockFileSystem = new();
-    private readonly MockPathHelper _mockPathHelper = new();
+    private readonly Mock<IFileSystem> _mockFileSystem = new();
+    private readonly Mock<IPath> _mockPathHelper = new();
     private readonly Mock<IFileSearchService> _mockFileSearchService = new();
     private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
     private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
@@ -35,24 +36,40 @@ public class GrepEngineTests : IDisposable
             .Returns(_mockStrategy.Object);
         _engine = new ParallelGrepEngine(
             _mockStrategyFactory.Object,
-            _mockFileSystem,
-            _mockPathHelper,
+            _mockFileSystem.Object,
+            _mockPathHelper.Object,
             _mockFileSearchService.Object,
             _mockPerformanceOptimizer.Object,
             _mockMatchResultPool.Object);
+    }
+
+    /// <summary>
+    /// 配列をIAsyncEnumerableに変換するヘルパーメソッド
+    /// </summary>
+    private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(IEnumerable<T> items, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+            await Task.Yield(); // 非同期性を保つため
+        }
     }
 
     [Fact]
     public async Task SearchInDirectoryAsync_WithMatchingFile_ReturnsMatchResult()
     {
         // Arrange
-        var testDir = "testdir";
         var testFile = "testdir/test.txt";
         var testContent = "This is a test file\nwith multiple lines";
         var searchPattern = "test";
         
-        _mockFileSystem.AddDirectory(testDir);
-        _mockFileSystem.AddFile(testFile, testContent);
+        // Mock file system to return file content
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(testFile, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(testContent.Split('\n')));
+        
+        _mockFileSystem.Setup(fs => fs.FileExists(testFile))
+                      .Returns(true);
         
         var matches = new List<MatchResult>
         {
@@ -308,16 +325,20 @@ public class GrepEngineTests : IDisposable
     public async Task SearchAsync_WithRecursiveSearch_FindsFilesInSubdirectories()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "testdir";
         var subDir = tempDir + "/subdir";
-        _mockFileSystem.AddDirectory(subDir);
         
         var file1 = tempDir + "/file1.txt";
         var file2 = subDir + "/file2.txt";
-        _mockFileSystem.AddFile(file1, "hello world");
-        _mockFileSystem.AddFile(file2, "hello test");
-        _tempFiles.Add(file1);
-        _tempFiles.Add(file2);
+        
+        // Mock file system to return file contents
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(file1, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(new[] { "hello world" }));
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(file2, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(new[] { "hello test" }));
+        
+        _mockFileSystem.Setup(fs => fs.FileExists(file1)).Returns(true);
+        _mockFileSystem.Setup(fs => fs.FileExists(file2)).Returns(true);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -344,13 +365,18 @@ public class GrepEngineTests : IDisposable
     public async Task SearchAsync_WithExcludePattern_ExcludesMatchingFiles()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "testdir";
         var tempFile1 = tempDir + "/test.txt";
         var tempFile2 = tempDir + "/test.log";
-        _mockFileSystem.AddFile(tempFile1, "hello world");
-        _mockFileSystem.AddFile(tempFile2, "hello test");
-        _tempFiles.Add(tempFile1);
-        _tempFiles.Add(tempFile2);
+        
+        // Mock file system to return file contents
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(tempFile1, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(new[] { "hello world" }));
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(tempFile2, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(new[] { "hello test" }));
+        
+        _mockFileSystem.Setup(fs => fs.FileExists(tempFile1)).Returns(true);
+        _mockFileSystem.Setup(fs => fs.FileExists(tempFile2)).Returns(true);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -374,13 +400,18 @@ public class GrepEngineTests : IDisposable
     public async Task SearchAsync_WithIncludePattern_IncludesOnlyMatchingFiles()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "testdir";
         var tempFile1 = tempDir + "/test.txt";
         var tempFile2 = tempDir + "/test.log";
-        _mockFileSystem.AddFile(tempFile1, "hello world");
-        _mockFileSystem.AddFile(tempFile2, "hello test");
-        _tempFiles.Add(tempFile1);
-        _tempFiles.Add(tempFile2);
+        
+        // Mock file system to return file contents
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(tempFile1, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(new[] { "hello world" }));
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(tempFile2, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(new[] { "hello test" }));
+        
+        _mockFileSystem.Setup(fs => fs.FileExists(tempFile1)).Returns(true);
+        _mockFileSystem.Setup(fs => fs.FileExists(tempFile2)).Returns(true);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -442,29 +473,32 @@ public class GrepEngineTests : IDisposable
     public void Constructor_WithNullStrategyFactory_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(null!, _mockFileSystem, _mockPathHelper, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
+        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(null!, _mockFileSystem.Object, _mockPathHelper.Object, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
     }
 
     [Fact]
     public void Constructor_WithNullFileSystem_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, null!, _mockPathHelper, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
+        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, null!, _mockPathHelper.Object, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
     }
 
     [Fact]
     public void Constructor_WithNullPathHelper_ThrowsArgumentNullException()
     {
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem, null!, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
+        Assert.Throws<ArgumentNullException>(() => new ParallelGrepEngine(_mockStrategyFactory.Object, _mockFileSystem.Object, null!, _mockFileSearchService.Object, _mockPerformanceOptimizer.Object, _mockMatchResultPool.Object));
     }
 
     private string CreateTempFile(string content, string extension = ".txt")
     {
         var tempFile = $"temp_{Guid.NewGuid()}{extension}";
         
-        // モックファイルシステムにファイルを追加
-        _mockFileSystem.AddFile(tempFile, content);
+        // モックファイルシステムにファイル読み込みをセットアップ
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsync(tempFile, It.IsAny<CancellationToken>()))
+                      .Returns(ToAsyncEnumerable(content.Split('\n')));
+        _mockFileSystem.Setup(fs => fs.FileExists(tempFile)).Returns(true);
+        
         _tempFiles.Add(tempFile);
         return tempFile;
     }
@@ -472,7 +506,7 @@ public class GrepEngineTests : IDisposable
     private string CreateTempDirectory()
     {
         var tempDir = $"temp_dir_{Guid.NewGuid()}";
-        _mockFileSystem.AddDirectory(tempDir);
+        // モックでは特別な処理は不要
         _tempFiles.Add(tempDir);
         return tempDir;
     }
@@ -496,8 +530,7 @@ public class GrepEngineTests : IDisposable
 
     public void Dispose()
     {
-        // モックファイルシステムをクリア
-        _mockFileSystem.Clear();
+        // モックなので特別なクリア処理は不要
         _tempFiles.Clear();
     }
 }

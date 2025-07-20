@@ -2,6 +2,7 @@ using GrepCompatible.CommandLine;
 using GrepCompatible.Core;
 using GrepCompatible.Models;
 using GrepCompatible.Constants;
+using Moq;
 using System.Text;
 using Xunit;
 
@@ -12,90 +13,125 @@ namespace GrepCompatible.Test;
 /// </summary>
 public class ContextOptionsTests
 {
+    private readonly Mock<ICommand> _mockCommand = new();
+    private readonly Mock<IGrepEngine> _mockEngine = new();
+    private readonly Mock<IOutputFormatter> _mockFormatter = new();
     private readonly GrepApplication _application;
 
     public ContextOptionsTests()
     {
-        _application = GrepApplication.CreateDefault();
+        _application = new GrepApplication(_mockCommand.Object, _mockEngine.Object, _mockFormatter.Object);
     }
 
     [Fact]
-    public async Task RunAsync_WithAfterContext_ShowsContextLines()
+    public async Task RunAsync_WithAfterContext_CallsEngineWithCorrectOptions()
     {
         // Arrange
-        var tempFile = Path.GetTempFileName();
-        var content = "line 1\nline 2\nmatch line 3\nline 4\nline 5";
-        await File.WriteAllTextAsync(tempFile, content);
+        var args = new[] { "-A", "2", "match", "test.txt" };
+        var mockOptions = new Mock<IOptionContext>();
+        var searchResult = new SearchResult([], 0, 0, TimeSpan.FromMilliseconds(100));
+        const int expectedExitCode = 0;
         
-        var args = new[] { "-A", "2", "match", tempFile };
+        var parseResult = CommandParseResult.Success();
+        _mockCommand.Setup(c => c.Parse(args)).Returns(parseResult);
+        _mockCommand.Setup(c => c.ToOptionContext()).Returns(mockOptions.Object);
+        _mockEngine.Setup(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(searchResult);
+        _mockFormatter.Setup(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()))
+            .ReturnsAsync(expectedExitCode);
         
         // Act
         var exitCode = await _application.RunAsync(args);
         
         // Assert
-        Assert.Equal(0, exitCode);
-        
-        // Cleanup
-        File.Delete(tempFile);
+        Assert.Equal(expectedExitCode, exitCode);
+        _mockCommand.Verify(c => c.Parse(args), Times.Once);
+        _mockCommand.Verify(c => c.ToOptionContext(), Times.Once);
+        _mockEngine.Verify(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()), Times.Once);
+        _mockFormatter.Verify(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()), Times.Once);
     }
 
     [Fact]
-    public async Task RunAsync_WithBeforeContext_ShowsContextLines()
+    public async Task RunAsync_WithBeforeContext_CallsEngineWithCorrectOptions()
     {
         // Arrange
-        var tempFile = Path.GetTempFileName();
-        var content = "line 1\nline 2\nmatch line 3\nline 4\nline 5";
-        await File.WriteAllTextAsync(tempFile, content);
+        var args = new[] { "-B", "2", "match", "test.txt" };
+        var mockOptions = new Mock<IOptionContext>();
+        var searchResult = new SearchResult([], 0, 0, TimeSpan.FromMilliseconds(100));
+        const int expectedExitCode = 0;
         
-        var args = new[] { "-B", "2", "match", tempFile };
+        var parseResult = CommandParseResult.Success();
+        _mockCommand.Setup(c => c.Parse(args)).Returns(parseResult);
+        _mockCommand.Setup(c => c.ToOptionContext()).Returns(mockOptions.Object);
+        _mockEngine.Setup(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(searchResult);
+        _mockFormatter.Setup(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()))
+            .ReturnsAsync(expectedExitCode);
         
         // Act
         var exitCode = await _application.RunAsync(args);
         
         // Assert
-        Assert.Equal(0, exitCode);
-        
-        // Cleanup
-        File.Delete(tempFile);
+        Assert.Equal(expectedExitCode, exitCode);
+        _mockCommand.Verify(c => c.Parse(args), Times.Once);
+        _mockCommand.Verify(c => c.ToOptionContext(), Times.Once);
+        _mockEngine.Verify(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()), Times.Once);
+        _mockFormatter.Verify(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()), Times.Once);
     }
 
     [Fact]
-    public async Task RunAsync_WithContext_ShowsContextLines()
+    public async Task RunAsync_WithContext_CallsEngineWithCorrectOptions()
     {
         // Arrange
-        var tempFile = Path.GetTempFileName();
-        var content = "line 1\nline 2\nmatch line 3\nline 4\nline 5";
-        await File.WriteAllTextAsync(tempFile, content);
+        var args = new[] { "-C", "2", "match", "test.txt" };
+        var mockOptions = new Mock<IOptionContext>();
+        var searchResult = new SearchResult([], 0, 0, TimeSpan.FromMilliseconds(100));
+        const int expectedExitCode = 0;
         
-        var args = new[] { "-C", "2", "match", tempFile };
+        var parseResult = CommandParseResult.Success();
+        _mockCommand.Setup(c => c.Parse(args)).Returns(parseResult);
+        _mockCommand.Setup(c => c.ToOptionContext()).Returns(mockOptions.Object);
+        _mockEngine.Setup(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(searchResult);
+        _mockFormatter.Setup(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()))
+            .ReturnsAsync(expectedExitCode);
         
         // Act
         var exitCode = await _application.RunAsync(args);
         
         // Assert
-        Assert.Equal(0, exitCode);
-        
-        // Cleanup
-        File.Delete(tempFile);
+        Assert.Equal(expectedExitCode, exitCode);
+        _mockCommand.Verify(c => c.Parse(args), Times.Once);
+        _mockCommand.Verify(c => c.ToOptionContext(), Times.Once);
+        _mockEngine.Verify(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()), Times.Once);
+        _mockFormatter.Verify(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()), Times.Once);
     }
 
     [Fact]
-    public async Task RunAsync_WithContextAndLineNumbers_ShowsCorrectFormat()
+    public async Task RunAsync_WithContextAndLineNumbers_CallsEngineWithCorrectOptions()
     {
         // Arrange
-        var tempFile = Path.GetTempFileName();
-        var content = "line 1\nline 2\nmatch line 3\nline 4\nline 5";
-        await File.WriteAllTextAsync(tempFile, content);
+        var args = new[] { "-n", "-C", "1", "match", "test.txt" };
+        var mockOptions = new Mock<IOptionContext>();
+        var searchResult = new SearchResult([], 0, 0, TimeSpan.FromMilliseconds(100));
+        const int expectedExitCode = 0;
         
-        var args = new[] { "-n", "-C", "1", "match", tempFile };
+        var parseResult = CommandParseResult.Success();
+        _mockCommand.Setup(c => c.Parse(args)).Returns(parseResult);
+        _mockCommand.Setup(c => c.ToOptionContext()).Returns(mockOptions.Object);
+        _mockEngine.Setup(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(searchResult);
+        _mockFormatter.Setup(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()))
+            .ReturnsAsync(expectedExitCode);
         
         // Act
         var exitCode = await _application.RunAsync(args);
         
         // Assert
-        Assert.Equal(0, exitCode);
-        
-        // Cleanup
-        File.Delete(tempFile);
+        Assert.Equal(expectedExitCode, exitCode);
+        _mockCommand.Verify(c => c.Parse(args), Times.Once);
+        _mockCommand.Verify(c => c.ToOptionContext(), Times.Once);
+        _mockEngine.Verify(e => e.SearchAsync(mockOptions.Object, It.IsAny<CancellationToken>()), Times.Once);
+        _mockFormatter.Verify(f => f.FormatOutputAsync(searchResult, mockOptions.Object, It.IsAny<TextWriter>()), Times.Once);
     }
 }

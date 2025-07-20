@@ -4,11 +4,12 @@ using GrepCompatible.CommandLine;
 using GrepCompatible.Models;
 using GrepCompatible.Strategies;
 using GrepCompatible.Constants;
-using GrepCompatible.Test.Infrastructure;
 using Moq;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
@@ -19,11 +20,10 @@ namespace GrepCompatible.Test;
 /// </summary>
 public class GlobPatternTests : IDisposable
 {
-    private readonly List<string> _tempFiles = [];
     private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory = new();
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
-    private readonly MockFileSystem _mockFileSystem = new();
-    private readonly MockPathHelper _mockPathHelper = new();
+    private readonly Mock<IFileSystem> _mockFileSystem = new();
+    private readonly Mock<IPath> _mockPath = new();
     private readonly Mock<IFileSearchService> _mockFileSearchService = new();
     private readonly Mock<IPerformanceOptimizer> _mockPerformanceOptimizer = new();
     private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
@@ -35,8 +35,8 @@ public class GlobPatternTests : IDisposable
             .Returns(_mockStrategy.Object);
         _engine = new ParallelGrepEngine(
             _mockStrategyFactory.Object,
-            _mockFileSystem,
-            _mockPathHelper,
+            _mockFileSystem.Object,
+            _mockPath.Object,
             _mockFileSearchService.Object,
             _mockPerformanceOptimizer.Object,
             _mockMatchResultPool.Object);
@@ -46,17 +46,13 @@ public class GlobPatternTests : IDisposable
     public async Task SearchAsync_WithExcludeGlobPattern_ExcludesMatchingFiles()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "temp_dir";
         var csharpFile = tempDir + "/Program.cs";
         var textFile = tempDir + "/README.txt";
         var logFile = tempDir + "/debug.log";
         
-        _mockFileSystem.AddFile(csharpFile, "hello world");
-        _mockFileSystem.AddFile(textFile, "hello test");
-        _mockFileSystem.AddFile(logFile, "hello debug");
-        _tempFiles.Add(csharpFile);
-        _tempFiles.Add(textFile);
-        _tempFiles.Add(logFile);
+        var files = new[] { csharpFile, textFile, logFile };
+        SetupMockFileSystem(files);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -85,17 +81,13 @@ public class GlobPatternTests : IDisposable
     public async Task SearchAsync_WithIncludeGlobPattern_IncludesOnlyMatchingFiles()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "temp_dir";
         var csharpFile = tempDir + "/Program.cs";
         var textFile = tempDir + "/README.txt";
         var logFile = tempDir + "/debug.log";
         
-        _mockFileSystem.AddFile(csharpFile, "hello world");
-        _mockFileSystem.AddFile(textFile, "hello test");
-        _mockFileSystem.AddFile(logFile, "hello debug");
-        _tempFiles.Add(csharpFile);
-        _tempFiles.Add(textFile);
-        _tempFiles.Add(logFile);
+        var files = new[] { csharpFile, textFile, logFile };
+        SetupMockFileSystem(files);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -122,20 +114,14 @@ public class GlobPatternTests : IDisposable
     public async Task SearchAsync_WithQuestionMarkGlobPattern_MatchesSingleCharacter()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "temp_dir";
         var file1 = tempDir + "/test1.txt";
         var file2 = tempDir + "/test2.txt";
         var file3 = tempDir + "/test10.txt";
         var file4 = tempDir + "/test.txt";
         
-        _mockFileSystem.AddFile(file1, "hello world");
-        _mockFileSystem.AddFile(file2, "hello test");
-        _mockFileSystem.AddFile(file3, "hello debug");
-        _mockFileSystem.AddFile(file4, "hello sample");
-        _tempFiles.Add(file1);
-        _tempFiles.Add(file2);
-        _tempFiles.Add(file3);
-        _tempFiles.Add(file4);
+        var files = new[] { file1, file2, file3, file4 };
+        SetupMockFileSystem(files);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -165,20 +151,14 @@ public class GlobPatternTests : IDisposable
     public async Task SearchAsync_WithComplexGlobPattern_MatchesCorrectly()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "temp_dir";
         var file1 = tempDir + "/data.backup.txt";
         var file2 = tempDir + "/data.old.txt";
         var file3 = tempDir + "/data.new.txt";
         var file4 = tempDir + "/config.backup.txt";
         
-        _mockFileSystem.AddFile(file1, "hello world");
-        _mockFileSystem.AddFile(file2, "hello test");
-        _mockFileSystem.AddFile(file3, "hello debug");
-        _mockFileSystem.AddFile(file4, "hello sample");
-        _tempFiles.Add(file1);
-        _tempFiles.Add(file2);
-        _tempFiles.Add(file3);
-        _tempFiles.Add(file4);
+        var files = new[] { file1, file2, file3, file4 };
+        SetupMockFileSystem(files);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -210,20 +190,14 @@ public class GlobPatternTests : IDisposable
     public async Task SearchAsync_WithSpecialCharactersInGlobPattern_EscapesCorrectly()
     {
         // Arrange
-        var tempDir = CreateTempDirectory();
+        var tempDir = "temp_dir";
         var file1 = tempDir + "/test(1).txt";
         var file2 = tempDir + "/test[2].txt";
         var file3 = tempDir + "/test{3}.txt";
         var file4 = tempDir + "/test1.txt";
         
-        _mockFileSystem.AddFile(file1, "hello world");
-        _mockFileSystem.AddFile(file2, "hello test");
-        _mockFileSystem.AddFile(file3, "hello debug");
-        _mockFileSystem.AddFile(file4, "hello sample");
-        _tempFiles.Add(file1);
-        _tempFiles.Add(file2);
-        _tempFiles.Add(file3);
-        _tempFiles.Add(file4);
+        var files = new[] { file1, file2, file3, file4 };
+        SetupMockFileSystem(files);
         
         var mockOptions = new Mock<IOptionContext>();
         SetupBasicOptions(mockOptions, tempDir, "hello");
@@ -247,12 +221,42 @@ public class GlobPatternTests : IDisposable
         Assert.DoesNotContain(result.FileResults, fr => fr.FileName == file4);
     }
 
-    private string CreateTempDirectory()
+    private void SetupMockFileSystem(string[] files)
     {
-        var tempDir = $"temp_dir_{Guid.NewGuid()}";
-        _mockFileSystem.AddDirectory(tempDir);
-        _tempFiles.Add(tempDir);
-        return tempDir;
+        _mockFileSystem.Setup(fs => fs.EnumerateFiles(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<System.IO.SearchOption>()))
+            .Returns(files);
+        
+        _mockFileSystem.Setup(fs => fs.EnumerateFilesAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<System.IO.SearchOption>(), It.IsAny<CancellationToken>()))
+            .Returns(ToAsyncEnumerable(files));
+        
+        foreach (var file in files)
+        {
+            _mockFileSystem.Setup(fs => fs.FileExists(file)).Returns(true);
+            
+            var mockFileInfo = new Mock<IFileInfo>();
+            mockFileInfo.Setup(fi => fi.Length).Returns(100);
+            _mockFileSystem.Setup(fs => fs.GetFileInfo(file)).Returns(mockFileInfo.Object);
+            
+            _mockFileSystem.Setup(fs => fs.ReadLinesAsync(file, It.IsAny<CancellationToken>()))
+                .Returns(ToAsyncEnumerable(new[] { "test content" }));
+            
+            _mockPath.Setup(p => p.GetFileName(file)).Returns(System.IO.Path.GetFileName(file));
+            _mockPath.Setup(p => p.GetDirectoryName(file)).Returns(System.IO.Path.GetDirectoryName(file));
+        }
+
+        _mockFileSystem.Setup(fs => fs.DirectoryExists(It.IsAny<string>())).Returns(true);
+    }
+    
+    private static async IAsyncEnumerable<T> ToAsyncEnumerable<T>(
+        IEnumerable<T> items, 
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        foreach (var item in items)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            yield return item;
+            await Task.Yield();
+        }
     }
 
     private static void SetupBasicOptions(Mock<IOptionContext> mockOptions, string file, string pattern)
@@ -269,7 +273,6 @@ public class GlobPatternTests : IDisposable
 
     public void Dispose()
     {
-        _mockFileSystem.Clear();
-        _tempFiles.Clear();
+        // モック使用時はクリーンアップ不要
     }
 }
