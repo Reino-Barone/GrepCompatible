@@ -37,7 +37,7 @@ public class FileSystemTestBuilder
                 {
                     var mockFileInfo = new Mock<IFileInfo>();
                     mockFileInfo.Setup(fi => fi.Exists).Returns(true);
-                    mockFileInfo.Setup(fi => fi.Length).Returns(_files[path].Length);
+                    mockFileInfo.Setup(fi => fi.Length).Returns(System.Text.Encoding.UTF8.GetByteCount(_files[path]));
                     mockFileInfo.Setup(fi => fi.Name).Returns(Path.GetFileName(path));
                     mockFileInfo.Setup(fi => fi.FullName).Returns(path);
                     return mockFileInfo.Object;
@@ -111,6 +111,48 @@ public class FileSystemTestBuilder
                 }
                 return new StreamReader(new MemoryStream());
             });
+
+        // DirectoryExistsの設定
+        _mockFileSystem.Setup(fs => fs.DirectoryExists(It.IsAny<string>()))
+            .Returns<string>(path => _directories.Contains(path));
+
+        // EnumerateFilesの設定
+        _mockFileSystem.Setup(fs => fs.EnumerateFiles(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<SearchOption>()))
+            .Returns<string, string, SearchOption>((path, searchPattern, searchOption) =>
+            {
+                // 指定されたディレクトリまたはその子ディレクトリ内のファイルを列挙
+                var result = new List<string>();
+                
+                foreach (var filePath in _files.Keys)
+                {
+                    var dirPath = Path.GetDirectoryName(filePath) ?? string.Empty;
+                    
+                    if (searchOption == SearchOption.AllDirectories)
+                    {
+                        // 再帰検索の場合、パスが開始ディレクトリ以下にあるかチェック
+                        if (dirPath.StartsWith(path, StringComparison.OrdinalIgnoreCase) || path == "." || path == string.Empty)
+                        {
+                            if (MatchesPattern(Path.GetFileName(filePath), searchPattern))
+                            {
+                                result.Add(filePath);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // 現在のディレクトリのみ
+                        if (string.Equals(dirPath, path, StringComparison.OrdinalIgnoreCase) || (path == "." && string.IsNullOrEmpty(dirPath)))
+                        {
+                            if (MatchesPattern(Path.GetFileName(filePath), searchPattern))
+                            {
+                                result.Add(filePath);
+                            }
+                        }
+                    }
+                }
+                
+                return result;
+            });
     }
 
     private IAsyncEnumerable<string> CreateAsyncEnumerable(IEnumerable<string> source)
@@ -125,6 +167,25 @@ public class FileSystemTestBuilder
         {
             yield return item;
         }
+    }
+
+    private static bool MatchesPattern(string fileName, string pattern)
+    {
+        if (pattern == "*" || pattern == "*.*")
+        {
+            return true;
+        }
+        
+        // 簡単なワイルドカードマッチング
+        // より複雑なパターンが必要な場合は、System.IO.Enumeration.FileSystemName.MatchesSimpleExpression を使用
+        if (pattern.Contains('*') || pattern.Contains('?'))
+        {
+            // 正規表現に変換
+            var regexPattern = "^" + pattern.Replace(".", @"\.").Replace("*", ".*").Replace("?", ".") + "$";
+            return System.Text.RegularExpressions.Regex.IsMatch(fileName, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+        
+        return string.Equals(fileName, pattern, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
