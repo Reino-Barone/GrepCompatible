@@ -13,7 +13,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Integration;
 
 /// <summary>
 /// MockFileSystemを使用したクロスプラットフォーム対応テスト例

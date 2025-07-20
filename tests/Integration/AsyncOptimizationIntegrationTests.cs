@@ -13,7 +13,7 @@ using GrepCompatible.CommandLine;
 using GrepCompatible.Constants;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Integration;
 
 /// <summary>
 /// 非同期I/O最適化の統合テスト
