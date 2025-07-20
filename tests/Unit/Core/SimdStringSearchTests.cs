@@ -2,8 +2,11 @@ using System.Numerics;
 using GrepCompatible.Core;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Unit.Core;
 
+/// <summary>
+/// SimdStringSearchクラスの単体テスト
+/// </summary>
 public class SimdStringSearchTests
 {
     [Fact]

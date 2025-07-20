@@ -13,9 +13,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace GrepCompatible.Tests
+namespace GrepCompatible.Test.Integration
 {
-    public class MultiplePatternTests
+    /// <summary>
+    /// 複数パターン検索の統合テスト
+    /// </summary>
+    public class MultiplePatternIntegrationTests
     {
         private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory;
         private readonly Mock<IFileSystem> _mockFileSystem;
@@ -26,7 +29,7 @@ namespace GrepCompatible.Tests
         private readonly Mock<IOptionContext> _mockOptions;
         private readonly ParallelGrepEngine _engine;
 
-        public MultiplePatternTests()
+        public MultiplePatternIntegrationTests()
         {
             _mockStrategyFactory = new Mock<IMatchStrategyFactory>();
             _mockFileSystem = new Mock<IFileSystem>();

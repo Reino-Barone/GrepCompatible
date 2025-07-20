@@ -13,12 +13,12 @@ using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Integration;
 
 /// <summary>
-/// グロブパターンの--include/--exclude機能のテスト
+/// グロブパターンの--include/--exclude機能の統合テスト
 /// </summary>
-public class GlobPatternTests : IDisposable
+public class GlobPatternIntegrationTests : IDisposable
 {
     private readonly Mock<IMatchStrategyFactory> _mockStrategyFactory = new();
     private readonly Mock<IMatchStrategy> _mockStrategy = new();
@@ -29,7 +29,7 @@ public class GlobPatternTests : IDisposable
     private readonly Mock<IMatchResultPool> _mockMatchResultPool = new();
     private readonly ParallelGrepEngine _engine;
 
-    public GlobPatternTests()
+    public GlobPatternIntegrationTests()
     {
         _mockStrategyFactory.Setup(f => f.CreateStrategy(It.IsAny<IOptionContext>()))
             .Returns(_mockStrategy.Object);

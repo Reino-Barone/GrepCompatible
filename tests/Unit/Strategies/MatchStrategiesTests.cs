@@ -1,11 +1,14 @@
-﻿using GrepCompatible.Constants;
+using GrepCompatible.Constants;
 using GrepCompatible.Models;
 using GrepCompatible.Strategies;
 using Moq;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Unit.Strategies;
 
+/// <summary>
+/// MatchStrategiesクラス群の単体テスト
+/// </summary>
 public class MatchStrategiesTests
 {
     [Fact]

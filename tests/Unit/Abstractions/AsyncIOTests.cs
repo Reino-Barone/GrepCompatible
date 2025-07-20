@@ -11,10 +11,10 @@ using GrepCompatible.Core;
 using GrepCompatible.Test.Infrastructure;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Unit.Abstractions;
 
 /// <summary>
-/// IFileSystemインターフェースの非同期I/O機能のテスト
+/// IFileSystemインターフェースの非同期I/O機能の単体テスト
 /// </summary>
 public class AsyncIOTests
 {

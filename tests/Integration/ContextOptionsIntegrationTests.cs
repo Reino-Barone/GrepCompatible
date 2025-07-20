@@ -6,19 +6,19 @@ using Moq;
 using System.Text;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Integration;
 
 /// <summary>
-/// コンテキストオプションのテスト
+/// コンテキストオプションの統合テスト
 /// </summary>
-public class ContextOptionsTests
+public class ContextOptionsIntegrationTests
 {
     private readonly Mock<ICommand> _mockCommand = new();
     private readonly Mock<IGrepEngine> _mockEngine = new();
     private readonly Mock<IOutputFormatter> _mockFormatter = new();
     private readonly GrepApplication _application;
 
-    public ContextOptionsTests()
+    public ContextOptionsIntegrationTests()
     {
         _application = new GrepApplication(_mockCommand.Object, _mockEngine.Object, _mockFormatter.Object);
     }

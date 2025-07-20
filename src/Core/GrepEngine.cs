@@ -54,6 +54,10 @@ public async Task<SearchResult> SearchAsync(IOptionContext options, Cancellation
             // ファイル数に基づいて並列度を動的に調整
             var optimalParallelism = _performanceOptimizer.CalculateOptimalParallelism(filesList.Count);
             
+            // 0を防止する安全策
+            if (optimalParallelism <= 0)
+                optimalParallelism = 1;
+            
             // 並列処理でファイルを処理
             var parallelOptions = new ParallelOptions
             {
