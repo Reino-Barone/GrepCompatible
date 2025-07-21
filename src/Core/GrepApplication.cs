@@ -75,7 +75,19 @@ public class GrepApplication(
         var strategyFactory = new MatchStrategyFactory();
         var fileSystem = new FileSystem();
         var pathHelper = new PathHelper();
-        var engine = new ParallelGrepEngine(strategyFactory, fileSystem, pathHelper);
+        
+        // 新しいサービスを作成
+        var fileSearchService = new FileSearchService(fileSystem, pathHelper);
+        var performanceOptimizer = new PerformanceOptimizer();
+        var matchResultPool = new MatchResultPool();
+        
+        var engine = new ParallelGrepEngine(
+            strategyFactory, 
+            fileSystem, 
+            pathHelper,
+            fileSearchService,
+            performanceOptimizer,
+            matchResultPool);
         var formatter = new PosixOutputFormatter();
         
         return new GrepApplication(command, engine, formatter);

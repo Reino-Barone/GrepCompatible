@@ -7,10 +7,10 @@ using Moq;
 using System.Text;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Unit.Core;
 
 /// <summary>
-/// GrepApplicationクラスのテスト
+/// GrepApplicationクラスの単体テスト
 /// </summary>
 public class GrepApplicationTests
 {

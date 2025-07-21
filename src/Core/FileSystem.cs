@@ -25,7 +25,7 @@ public class FileSystem : IFileSystem
     public Stream OpenFile(string path, FileMode mode, FileAccess access, FileShare share, int bufferSize, FileOptions options)
         => new FileStream(path, mode, access, share, bufferSize, options);
     
-    public IEnumerable<string> EnumerateFiles(string path, string searchPattern, SearchOption searchOption)
+    public IEnumerable<string> EnumerateFiles(string path, string searchPattern, System.IO.SearchOption searchOption)
         => Directory.EnumerateFiles(path, searchPattern, searchOption);
     
     public StreamReader GetStandardInput() => new StreamReader(Console.OpenStandardInput());
@@ -101,7 +101,7 @@ public class FileSystem : IFileSystem
     /// <summary>
     /// ディレクトリ内のファイルを効率的に非同期で列挙（FileSystemEnumerableを使用）
     /// </summary>
-    public async IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, SearchOption searchOption, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<string> EnumerateFilesAsync(string path, string searchPattern, System.IO.SearchOption searchOption, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // まずディレクトリの存在確認
         if (!Directory.Exists(path))
@@ -110,7 +110,7 @@ public class FileSystem : IFileSystem
         // FileSystemEnumerableを使用した高性能な実装
         var enumerationOptions = new EnumerationOptions
         {
-            RecurseSubdirectories = searchOption == SearchOption.AllDirectories,
+            RecurseSubdirectories = searchOption == System.IO.SearchOption.AllDirectories,
             MatchType = MatchType.Simple,
             MatchCasing = MatchCasing.PlatformDefault,
             IgnoreInaccessible = true, // アクセス権限のないファイルを自動的にスキップ
@@ -198,7 +198,7 @@ public class FileSystem : IFileSystem
     /// <summary>
     /// より効率的な非同期ファイル列挙（チャンク化処理）
     /// </summary>
-    public async IAsyncEnumerable<string> EnumerateFilesAsyncChunked(string path, string searchPattern, SearchOption searchOption, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<string> EnumerateFilesAsyncChunked(string path, string searchPattern, System.IO.SearchOption searchOption, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         const int chunkSize = 100; // 100ファイルずつ処理
         

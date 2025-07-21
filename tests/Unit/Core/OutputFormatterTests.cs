@@ -5,8 +5,11 @@ using Moq;
 using System.Text;
 using Xunit;
 
-namespace GrepCompatible.Test;
+namespace GrepCompatible.Test.Unit.Core;
 
+/// <summary>
+/// OutputFormatterクラスの単体テスト
+/// </summary>
 public class OutputFormatterTests
 {
     private readonly PosixOutputFormatter _formatter = new();
