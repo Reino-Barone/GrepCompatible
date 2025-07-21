@@ -49,12 +49,43 @@
 
 ## インストール
 
-### オプション1: GitHubリリースから
+### オプション1: 自己完結型実行ファイル（推奨）
+
+Windows用の自己完結型実行ファイルをダウンロードして簡単インストール：
 
 1. [リリースページ](https://github.com/Reino-Barone/GrepCompatible/releases)から最新版をダウンロード
-2. 実行ファイルをPATHの通った場所に配置
+2. ZIPファイルを展開
+3. **PowerShell（推奨）**: `install-windows.ps1`を実行
+   ```powershell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   .\install-windows.ps1
+   ```
+4. **コマンドプロンプト**: `install-windows.bat`をダブルクリックまたは実行
 
-### オプション2: ソースからビルド
+#### 利用可能なアーキテクチャ
+- `win-x64`: 64ビットWindows（最も一般的）
+- `win-x86`: 32ビットWindows
+- `win-arm64`: ARM64 Windows（Surface Pro Xなど）
+
+#### インストールオプション
+- **ユーザーインストール（デフォルト）**: `%LOCALAPPDATA%\GrepCompatible`にインストール
+- **システム全体インストール**: `%ProgramFiles%\GrepCompatible`にインストール（管理者権限必要）
+  ```powershell
+  .\install-windows.ps1 -ForAllUsers
+  ```
+
+#### アンインストール
+```powershell
+.\install-windows.ps1 -Uninstall
+```
+
+### オプション2: GitHubリリースから手動インストール
+
+1. [リリースページ](https://github.com/Reino-Barone/GrepCompatible/releases)から`grep.exe`をダウンロード
+2. 任意のディレクトリに配置（例：`C:\Tools\`）
+3. そのディレクトリをPATH環境変数に追加
+
+### オプション3: ソースからビルド
 
 #### 前提条件
 
@@ -78,6 +109,23 @@ dotnet run --project src -- [OPTIONS] PATTERN [FILE...]
 dotnet publish src -c Release -o ./publish
 ./publish/GrepCompatible [OPTIONS] PATTERN [FILE...]
 ```
+
+#### 自己完結型実行ファイルの作成
+
+Windows用の配布可能な実行ファイルを作成：
+
+```bash
+# Windows x64向け（単一ファイル）
+dotnet publish src -c Release -r win-x64 --self-contained true -o ./dist/win-x64 -p:PublishSingleFile=true
+
+# 全アーキテクチャのリリースパッケージを作成
+pwsh scripts/build-release.ps1
+
+# 特定のアーキテクチャのパッケージを作成
+pwsh scripts/create-package.ps1 -Runtime win-x64
+```
+
+作成された`grep.exe`は.NETランタイムを内包した自己完結型実行ファイルです。
 
 ## 使用方法
 
@@ -171,6 +219,13 @@ GrepCompatible/
 │   ├── Core/               # コアアプリケーションロジック
 │   ├── Models/             # データモデル
 │   └── Strategies/         # パターンマッチング戦略
+├── scripts/                # ビルドと配布スクリプト
+│   ├── build-release.ps1   # 完全リリースビルド
+│   ├── build-windows.ps1   # Windows実行ファイルビルド
+│   ├── build-windows.bat   # Windows実行ファイルビルド（バッチ）
+│   ├── create-package.ps1  # インストールパッケージ作成
+│   ├── install-windows.ps1 # Windows インストーラー
+│   └── install-windows.bat # Windows インストーラー（バッチ）
 ├── tests/                  # 単体テスト
 └── GrepCompatible.sln
 ```
@@ -196,9 +251,30 @@ dotnet build
 # リリースビルド
 dotnet build -c Release
 
-# 配布用パブリッシュ
-dotnet publish -c Release -r win-x64 --self-contained
+# 配布用パブリッシュ（フレームワーク依存）
+dotnet publish -c Release -o ./publish
+
+# 自己完結型実行ファイル（Windows x64）
+dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./dist/win-x64
 ```
+
+### 配布パッケージの作成
+
+```bash
+# 全アーキテクチャのリリースパッケージを作成（PowerShell）
+pwsh scripts/build-release.ps1
+
+# 特定のアーキテクチャのパッケージを作成
+pwsh scripts/create-package.ps1 -Runtime win-x64
+
+# Windowsでバッチファイルを使用
+scripts\build-windows.bat
+```
+
+作成されたパッケージには以下が含まれます：
+- 自己完結型実行ファイル（`grep.exe`）
+- インストールスクリプト（PowerShellとバッチ両対応）
+- インストール手順書（`README.txt`）
 
 ## パフォーマンス
 
