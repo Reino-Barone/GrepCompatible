@@ -255,10 +255,6 @@ We welcome contributions to the project!
 - Include benchmarks for performance-affecting changes
 - Update documentation appropriately
 
-### Roadmap
-
-Check our development roadmap at [.plan/roadmap.md](.plan/roadmap.md) to see what's planned for future releases.
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
