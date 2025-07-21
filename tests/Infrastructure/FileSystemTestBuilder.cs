@@ -328,4 +328,78 @@ public class FileSystemTestBuilder
     {
         return _mockFileSystem.Object;
     }
+
+    // ========== ファクトリメソッド ==========
+
+    /// <summary>
+    /// 基本的なプロジェクト構造を持つファイルシステムを作成
+    /// </summary>
+    public static FileSystemTestBuilder CreateBasicProject()
+    {
+        return new FileSystemTestBuilder()
+            .WithDirectory(".")
+            .WithDirectory("src")
+            .WithDirectory("tests")
+            .WithFile("README.md", "# Project Title")
+            .WithFile("src/Program.cs", "using System;\n\nclass Program { static void Main() { } }")
+            .WithFile("tests/UnitTest1.cs", "using Xunit;\n\npublic class UnitTest1 { }");
+    }
+
+    /// <summary>
+    /// 複数パターンテスト用のファイルシステムを作成
+    /// </summary>
+    public static FileSystemTestBuilder CreateMultiplePatternTestFiles()
+    {
+        return new FileSystemTestBuilder()
+            .WithDirectory(".")
+            .WithFile("test.cs", "test content")
+            .WithFile("test.js", "test content")
+            .WithFile("test.txt", "test content")
+            .WithFile("test.log", "test content");
+    }
+
+    /// <summary>
+    /// サブディレクトリを含む複数パターンテスト用のファイルシステムを作成
+    /// </summary>
+    public static FileSystemTestBuilder CreateNestedMultiplePatternTestFiles()
+    {
+        return new FileSystemTestBuilder()
+            .WithDirectory(".")
+            .WithDirectory("src")
+            .WithDirectory("tests")
+            .WithFile("src/test.cs", "test content")
+            .WithFile("src/test.js", "test content")
+            .WithFile("tests/test.cs", "test content")
+            .WithFile("tests/test.js", "test content");
+    }
+
+    /// <summary>
+    /// 大きなファイルを含むテスト用のファイルシステムを作成
+    /// </summary>
+    public static FileSystemTestBuilder CreateLargeFileTestSystem()
+    {
+        return new FileSystemTestBuilder()
+            .WithDirectory(".")
+            .WithFile("large.txt", string.Join("\n", Enumerable.Range(1, 10000).Select(i => $"Line {i} with test content")));
+    }
+
+    /// <summary>
+    /// 標準入力テスト用のファイルシステムを作成
+    /// </summary>
+    public static FileSystemTestBuilder CreateStandardInputTestSystem(string standardInput)
+    {
+        return new FileSystemTestBuilder()
+            .WithStandardInput(standardInput);
+    }
+
+    /// <summary>
+    /// 空のディレクトリ構造を持つファイルシステムを作成
+    /// </summary>
+    public static FileSystemTestBuilder CreateEmptyDirectoryStructure()
+    {
+        return new FileSystemTestBuilder()
+            .WithDirectory(".")
+            .WithDirectory("empty")
+            .WithDirectory("also_empty");
+    }
 }

@@ -104,8 +104,7 @@ public class AsyncOptimizationIntegrationTests
     {
         // Arrange
         var testContent = "line1\ntest line\nline3\ntest again\nline5";
-        var fileSystemBuilder = new FileSystemTestBuilder();
-        var fileSystem = fileSystemBuilder
+        var fileSystem = new FileSystemTestBuilder()
             .WithFile("test.txt", testContent)
             .Build();
 
@@ -249,10 +248,8 @@ public class AsyncOptimizationIntegrationTests
     public async Task FileProcessing_WithCancellation_ShouldRespectCancellationToken()
     {
         // Arrange
-        var largeContent = string.Join("\n", Enumerable.Range(0, 100000).Select(i => $"line {i}"));
-        var fileSystemBuilder = new FileSystemTestBuilder();
-        var fileSystem = fileSystemBuilder
-            .WithFile("huge.txt", largeContent)
+        var fileSystem = FileSystemTestBuilder.CreateLargeFileTestSystem()
+            .WithFile("huge.txt", string.Join("\n", Enumerable.Range(0, 100000).Select(i => $"line {i}")))
             .Build();
 
         var engine = CreateEngine(fileSystem);
