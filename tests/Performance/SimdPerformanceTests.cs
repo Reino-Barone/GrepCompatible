@@ -73,9 +73,7 @@ public class SimdPerformanceTests
     public async Task SingleCharSearchPerformanceTest(string pattern, bool ignoreCase)
     {
         var testData = GenerateTestFile(LargeFileLines);
-        var fileSystem = new FileSystemTestBuilder()
-            .WithFile("test.txt", testData)
-            .Build();
+        var fileSystem = FileSystemTestBuilder.CreatePerformanceTestFile("test.txt", testData).Build();
         
         var strategyFactory = new MatchStrategyFactory();
         var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
@@ -144,9 +142,7 @@ public class SimdPerformanceTests
     public async Task ShortPatternSearchPerformanceTest(string pattern, bool ignoreCase)
     {
         var testData = GenerateTestFile(LargeFileLines);
-        var fileSystem = new FileSystemTestBuilder()
-            .WithFile("test.txt", testData)
-            .Build();
+        var fileSystem = FileSystemTestBuilder.CreatePerformanceTestFile("test.txt", testData).Build();
         
         var strategyFactory = new MatchStrategyFactory();
         var fileSearchService = new FileSearchService(fileSystem, new PathHelper());
@@ -209,9 +205,7 @@ public class SimdPerformanceTests
     public async Task SimdVsTraditionalStrategyComparison()
     {
         var testData = GenerateTestFile(LargeFileLines);
-        var fileSystem = new FileSystemTestBuilder()
-            .WithFile("test.txt", testData)
-            .Build();
+        var fileSystem = FileSystemTestBuilder.CreatePerformanceTestFile("test.txt", testData).Build();
         
         var pathHelper = new PathHelper();
         
@@ -291,9 +285,7 @@ public class SimdPerformanceTests
     public async Task LargeDataMemoryEfficiencyTest()
     {
         var testData = GenerateTestFile(LargeFileLines * 5); // 5倍の大きなファイル
-        var fileSystem = new FileSystemTestBuilder()
-            .WithFile("large_test.txt", testData)
-            .Build();
+        var fileSystem = FileSystemTestBuilder.CreatePerformanceTestFile("large_test.txt", testData).Build();
         
         var strategyFactory = new MatchStrategyFactory();
         var fileSearchService = new FileSearchService(fileSystem, new PathHelper());

@@ -402,4 +402,13 @@ public class FileSystemTestBuilder
             .WithDirectory("empty")
             .WithDirectory("also_empty");
     }
+
+    /// <summary>
+    /// パフォーマンステスト用の単一ファイルシステムを作成
+    /// </summary>
+    public static FileSystemTestBuilder CreatePerformanceTestFile(string fileName, string content)
+    {
+        return new FileSystemTestBuilder()
+            .WithFile(fileName, content);
+    }
 }
