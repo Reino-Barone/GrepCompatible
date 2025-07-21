@@ -1,8 +1,10 @@
 # GrepCompatible
 
-.NET 9.0で書かれた高性能なPOSIX準拠のgrep実装です。
+.NET 8.0で書かれた高性能なPOSIX準拠のgrep実装です。
 
 📖 **Languages**: [English](README-en.md) | [日本語](README.md)
+
+**Current Version**: v0.1.0 (July 22, 2025)
 
 ---
 
@@ -11,8 +13,8 @@
 ### 基本機能
 
 - **POSIX準拠**: 標準的なgrepコマンドラインオプションと動作を実装
-- **高性能**: 並列処理とメモリ効率最適化により高速動作
-- **クロスプラットフォーム**: Windows、Linux、macOSで.NET 9.0を使用して動作
+- **高性能**: SIMD最適化、並列処理、メモリ効率最適化により高速動作
+- **クロスプラットフォーム**: Windows、Linux、macOSで.NET 8.0を使用して動作
 - **パターンマッチング**: 正規表現、固定文字列、拡張正規表現パターンをサポート
 
 ### 検索オプション
@@ -47,11 +49,18 @@
 
 ## インストール
 
-### 前提条件
+### オプション1: GitHubリリースから
 
-- .NET 9.0 SDK以降
+1. [リリースページ](https://github.com/Reino-Barone/GrepCompatible/releases)から最新版をダウンロード
+2. 実行ファイルをPATHの通った場所に配置
 
-### ソースからビルド
+### オプション2: ソースからビルド
+
+#### 前提条件
+
+- .NET 8.0 SDK以降
+
+#### ビルド手順
 
 ```bash
 git clone https://github.com/Reino-Barone/GrepCompatible.git
@@ -59,16 +68,14 @@ cd GrepCompatible
 dotnet build -c Release
 ```
 
-### 実行
+#### 実行
 
 ```bash
+# プロジェクトから直接実行
 dotnet run --project src -- [OPTIONS] PATTERN [FILE...]
-```
 
-または実行可能ファイルをビルドして使用：
-
-```bash
-dotnet publish -c Release -o ./publish
+# または実行可能ファイルをビルドして使用
+dotnet publish src -c Release -o ./publish
 ./publish/GrepCompatible [OPTIONS] PATTERN [FILE...]
 ```
 
@@ -143,8 +150,9 @@ cat file.txt | GrepCompatible -i hello
 
 ### パフォーマンス最適化
 
-- **並列処理**: マルチスレッドファイル処理
-- **メモリ管理**: 効率的なメモリ使用のため`ArrayPool<T>`と`Span<T>`を使用
+- **SIMD最適化**: 高速文字列検索のためのSIMD命令活用
+- **並列処理**: マルチスレッドファイル処理とWork-Stealing戦略
+- **メモリ管理**: 効率的なメモリ使用のため`ArrayPool<T>`とメモリプールを使用
 - **非同期I/O**: ブロックしないファイル操作
 - **最適化された文字列操作**: 効率的な文字列検索とマッチング
 
@@ -170,7 +178,13 @@ GrepCompatible/
 ### テストの実行
 
 ```bash
+# 全テスト実行
 dotnet test
+
+# 特定のテストカテゴリ実行
+dotnet test --filter Category=Unit
+dotnet test --filter Category=Integration
+dotnet test --filter Category=Performance
 ```
 
 ### ビルド
@@ -190,10 +204,16 @@ dotnet publish -c Release -r win-x64 --self-contained
 
 GrepCompatibleは以下の要素で高性能を実現：
 
+- **SIMD最適化**: AVX2/SSE4.2命令による高速文字列検索
 - 複数のCPUコアでの並列ファイル処理
 - `Span<T>`を使用したメモリ効率的な文字列操作
-- `ArrayPool<T>`による最適化されたバッファ管理
+- `ArrayPool<T>`とカスタムメモリプールによる最適化されたバッファ管理
 - ブロックを防ぐ非同期I/O操作
+- キャンセレーション対応による応答性向上
+
+### ベンチマーク結果
+
+現在の実装は多くのケースで GNU grep と同等またはそれ以上のパフォーマンスを示しています。詳細なベンチマークは `tests/Performance/` で確認できます。
 
 ## 互換性
 
@@ -211,17 +231,33 @@ GrepCompatibleは以下の要素で高性能を実現：
 
 ### .NETバージョン
 
-- .NET 9.0以降が必要
-- モダンなC#機能を使用（プライマリコンストラクタ、レコード型など）
+- .NET 8.0以降が必要
+- モダンなC#機能を使用（プライマリコンストラクタ、レコード型、`required`修飾子など）
 
 ## コントリビューション
 
+プロジェクトへの貢献を歓迎します！
+
+### 貢献の手順
+
 1. リポジトリをフォーク
-2. 機能ブランチを作成
-3. 変更を実装
+2. 機能ブランチを作成 (`git checkout -b feature/amazing-feature`)
+3. 変更を実装とコミット (`git commit -m 'Add amazing feature'`)
 4. 新機能にテストを追加
-5. すべてのテストがパスすることを確認
-6. プルリクエストを送信
+5. すべてのテストがパスすることを確認 (`dotnet test`)
+6. ブランチにプッシュ (`git push origin feature/amazing-feature`)
+7. プルリクエストを送信
+
+### 開発ガイドライン
+
+- 新機能には必ずテストを追加
+- コードは既存のスタイルに従う
+- パフォーマンスに影響する変更はベンチマークも含める
+- ドキュメントを適切に更新する
+
+### 今後の計画
+
+プロジェクトの開発ロードマップは [.plan/roadmap.md](.plan/roadmap.md) で確認できます。
 
 ## ライセンス
 

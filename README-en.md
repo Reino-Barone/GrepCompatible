@@ -1,8 +1,10 @@
 # GrepCompatible
 
-A high-performance, POSIX-compatible grep implementation written in C# for .NET 9.0.
+A high-performance, POSIX-compatible grep implementation written in C# for .NET 8.0.
 
 📖 **Languages**: [English](README-en.md) | [日本語](README.md)
+
+**Current Version**: v0.1.0 (July 22, 2025)
 
 ---
 
@@ -11,8 +13,8 @@ A high-performance, POSIX-compatible grep implementation written in C# for .NET 
 ### Core Functionality
 
 - **POSIX-compatible**: Implements standard grep command-line options and behavior
-- **High Performance**: Optimized with parallel processing and memory-efficient algorithms
-- **Cross-platform**: Runs on Windows, Linux, and macOS with .NET 9.0
+- **High Performance**: Optimized with SIMD acceleration, parallel processing, and memory-efficient algorithms
+- **Cross-platform**: Runs on Windows, Linux, and macOS with .NET 8.0
 - **Pattern Matching**: Supports regular expressions, fixed strings, and extended regex patterns
 
 ### Search Options
@@ -47,11 +49,18 @@ A high-performance, POSIX-compatible grep implementation written in C# for .NET 
 
 ## Installation
 
-### Prerequisites
+### Option 1: Download from GitHub Releases
 
-- .NET 9.0 SDK or later
+1. Download the latest version from the [Releases page](https://github.com/Reino-Barone/GrepCompatible/releases)
+2. Place the executable in a directory that's in your PATH
 
-### Build from Source
+### Option 2: Build from Source
+
+#### Prerequisites
+
+- .NET 8.0 SDK or later
+
+#### Build Instructions
 
 ```bash
 git clone https://github.com/Reino-Barone/GrepCompatible.git
@@ -59,16 +68,14 @@ cd GrepCompatible
 dotnet build -c Release
 ```
 
-### Run
+#### Run
 
 ```bash
+# Run directly from project
 dotnet run --project src -- [OPTIONS] PATTERN [FILE...]
-```
 
-Or build and use the executable:
-
-```bash
-dotnet publish -c Release -o ./publish
+# Or build and use the executable
+dotnet publish src -c Release -o ./publish
 ./publish/GrepCompatible [OPTIONS] PATTERN [FILE...]
 ```
 
@@ -143,8 +150,9 @@ cat file.txt | GrepCompatible -i hello
 
 ### Performance Optimizations
 
-- **Parallel Processing**: Multi-threaded file processing
-- **Memory Management**: Uses `ArrayPool<T>` and `Span<T>` for efficient memory usage
+- **SIMD Acceleration**: Leverages SIMD instructions for high-speed string searching
+- **Parallel Processing**: Multi-threaded file processing with Work-Stealing strategies
+- **Memory Management**: Uses `ArrayPool<T>` and memory pools for efficient memory usage
 - **Async I/O**: Non-blocking file operations
 - **Optimized String Operations**: Efficient string searching and matching
 
@@ -170,7 +178,13 @@ GrepCompatible/
 ### Running Tests
 
 ```bash
+# Run all tests
 dotnet test
+
+# Run specific test categories
+dotnet test --filter Category=Unit
+dotnet test --filter Category=Integration
+dotnet test --filter Category=Performance
 ```
 
 ### Building
@@ -190,10 +204,16 @@ dotnet publish -c Release -r win-x64 --self-contained
 
 GrepCompatible is designed for high performance with:
 
+- **SIMD Optimization**: AVX2/SSE4.2 instructions for high-speed string searching
 - Parallel file processing across multiple CPU cores
 - Memory-efficient string operations using `Span<T>`
-- Optimized buffer management with `ArrayPool<T>`
+- Optimized buffer management with `ArrayPool<T>` and custom memory pools
 - Async I/O operations to prevent blocking
+- Cancellation support for improved responsiveness
+
+### Benchmark Results
+
+The current implementation shows performance equal to or better than GNU grep in many cases. Detailed benchmarks can be found in `tests/Performance/`.
 
 ## Compatibility
 
@@ -211,17 +231,33 @@ GrepCompatible is designed for high performance with:
 
 ### .NET Version
 
-- Requires .NET 9.0 or later
-- Uses modern C# features (primary constructors, record types, etc.)
+- Requires .NET 8.0 or later
+- Uses modern C# features (primary constructors, record types, `required` modifier, etc.)
 
 ## Contributing
 
+We welcome contributions to the project!
+
+### Contribution Steps
+
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes and commit (`git commit -m 'Add amazing feature'`)
 4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
+5. Ensure all tests pass (`dotnet test`)
+6. Push to the branch (`git push origin feature/amazing-feature`)
+7. Submit a pull request
+
+### Development Guidelines
+
+- Always add tests for new features
+- Follow existing code style conventions
+- Include benchmarks for performance-affecting changes
+- Update documentation appropriately
+
+### Roadmap
+
+Check our development roadmap at [.plan/roadmap.md](.plan/roadmap.md) to see what's planned for future releases.
 
 ## License
 
