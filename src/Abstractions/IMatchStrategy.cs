@@ -1,6 +1,6 @@
 using GrepCompatible.Models;
 
-namespace GrepCompatible.Strategies;
+namespace GrepCompatible.Abstractions;
 
 /// <summary>
 /// マッチング戦略のインターフェース

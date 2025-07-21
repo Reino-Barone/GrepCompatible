@@ -1,3 +1,4 @@
+using GrepCompatible.Abstractions;
 using GrepCompatible.Models;
 
 namespace GrepCompatible.Strategies;

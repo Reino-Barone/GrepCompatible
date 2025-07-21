@@ -1,3 +1,4 @@
+using GrepCompatible.Abstractions;
 using GrepCompatible.Constants;
 using GrepCompatible.Core;
 using GrepCompatible.Models;
