@@ -1,3 +1,9 @@
 **/bin
 **/obj
 **/.plan
+
+# Build and distribution outputs
+dist/
+release/
+package/
+*.zip
