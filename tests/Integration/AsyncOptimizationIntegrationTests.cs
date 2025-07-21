@@ -14,6 +14,7 @@ using GrepCompatible.CommandLine;
 using GrepCompatible.Constants;
 using Moq;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace GrepCompatible.Test.Integration;
 
@@ -22,13 +23,15 @@ namespace GrepCompatible.Test.Integration;
 /// </summary>
 public class AsyncOptimizationIntegrationTests
 {
+    private readonly ITestOutputHelper _output;
     private readonly IMatchStrategyFactory _strategyFactory;
     private readonly Mock<IPath> _pathHelper;
     private readonly IPerformanceOptimizer _performanceOptimizer;
     private readonly IMatchResultPool _matchResultPool;
 
-    public AsyncOptimizationIntegrationTests()
+    public AsyncOptimizationIntegrationTests(ITestOutputHelper output)
     {
+        _output = output;
         _strategyFactory = new MatchStrategyFactory();
         _pathHelper = new Mock<IPath>();
         SetupPathHelper();
@@ -130,6 +133,8 @@ public class AsyncOptimizationIntegrationTests
     [Fact]
     public async Task FileProcessing_WithLargeFile_ShouldHandleEfficientlyWithAsyncStreaming()
     {
+        _output.WriteLine("開始: FileProcessing_WithLargeFile_ShouldHandleEfficientlyWithAsyncStreaming");
+        
         // Arrange
         var sb = new StringBuilder();
         var matchingLineIndices = new List<int>();
@@ -148,23 +153,50 @@ public class AsyncOptimizationIntegrationTests
             }
         }
         
+        _output.WriteLine($"ファイル内容生成完了: {totalLines}行, マッチ予想: {matchingLineIndices.Count}行");
+        
         var fileSystemBuilder = new FileSystemTestBuilder();
         var fileSystem = fileSystemBuilder
             .WithFile("large.txt", sb.ToString())
             .Build();
 
+        _output.WriteLine("ファイルシステムビルド完了");
+
         var engine = CreateEngine(fileSystem);
         var options = CreateOptions("match", "large.txt");
 
+        _output.WriteLine("エンジンとオプション作成完了");
+
         // Act
+        _output.WriteLine("SearchAsync開始");
         var result = await engine.SearchAsync(options);
+        _output.WriteLine("SearchAsync完了");
 
         // Assert
+        _output.WriteLine($"結果: IsOverallSuccess={result.IsOverallSuccess}, TotalFiles={result.TotalFiles}, TotalMatches={result.TotalMatches}");
+        
+        if (result.FileResults?.Any() == true)
+        {
+            foreach (var fr in result.FileResults)
+            {
+                _output.WriteLine($"ファイル結果: {fr.FileName}, マッチ数={fr.TotalMatches}, エラー={fr.HasError}");
+                if (fr.HasError)
+                {
+                    _output.WriteLine($"エラーメッセージ: {fr.ErrorMessage}");
+                }
+            }
+        }
+        else
+        {
+            _output.WriteLine("ファイル結果が空またはnull");
+        }
+        
         Assert.True(result.IsOverallSuccess);
         Assert.Equal(1, result.TotalFiles);
         Assert.Equal(100, result.TotalMatches); // 100 matching lines
         
-        var fileResult = result.FileResults.First();
+        var fileResult = result.FileResults?.First();
+        Assert.NotNull(fileResult);
         Assert.Equal("large.txt", fileResult.FileName);
         Assert.Equal(100, fileResult.TotalMatches);
         Assert.False(fileResult.HasError);

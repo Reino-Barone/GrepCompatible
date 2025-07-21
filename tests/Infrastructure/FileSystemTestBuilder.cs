@@ -88,6 +88,18 @@ public class FileSystemTestBuilder
                 return CreateAsyncEnumerable(Array.Empty<string>());
             });
 
+        // ReadLinesAsMemoryAsyncの設定
+        _mockFileSystem.Setup(fs => fs.ReadLinesAsMemoryAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns((string path, CancellationToken cancellationToken) =>
+            {
+                if (_files.TryGetValue(path, out var content))
+                {
+                    var lines = content.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    return CreateAsyncEnumerableMemory(lines);
+                }
+                return CreateAsyncEnumerableMemory(Array.Empty<string>());
+            });
+
         // ReadStandardInputAsyncの設定
         _mockFileSystem.Setup(fs => fs.ReadStandardInputAsync(It.IsAny<CancellationToken>()))
             .Returns<CancellationToken>(cancellationToken => 
@@ -205,6 +217,20 @@ public class FileSystemTestBuilder
         foreach (var item in source)
         {
             yield return item;
+        }
+    }
+
+    private IAsyncEnumerable<ReadOnlyMemory<char>> CreateAsyncEnumerableMemory(IEnumerable<string> source)
+    {
+        return CreateAsyncEnumerableMemoryImpl(source);
+    }
+
+    private async IAsyncEnumerable<ReadOnlyMemory<char>> CreateAsyncEnumerableMemoryImpl(IEnumerable<string> source)
+    {
+        await Task.Yield(); // Make it actually async
+        foreach (var item in source)
+        {
+            yield return item.AsMemory();
         }
     }
 
