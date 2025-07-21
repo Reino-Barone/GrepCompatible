@@ -1,7 +1,7 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.Core;
 
-namespace GrepCompatible.Strategies;
+
+namespace GrepCompatible.Core.Strategies;
 
 /// <summary>
 /// マッチング戦略のファクトリー実装

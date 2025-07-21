@@ -1,8 +1,8 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.CommandLine;
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.CommandLine;
+using GrepCompatible.Abstractions.Constants;
 
-namespace GrepCompatible.Core;
+namespace GrepCompatible.Abstractions;
 
 /// <summary>
 /// オプションコンテキストの実装クラス

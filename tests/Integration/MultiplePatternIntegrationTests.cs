@@ -1,7 +1,7 @@
 using GrepCompatible.Core;
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.Constants;
 using GrepCompatible.Abstractions;
-using GrepCompatible.Strategies;
+using GrepCompatible.Core.Strategies;
 using GrepCompatible.Test.Infrastructure;
 using Moq;
 using System;

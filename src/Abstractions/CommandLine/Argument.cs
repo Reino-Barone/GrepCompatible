@@ -1,6 +1,6 @@
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.Constants;
 
-namespace GrepCompatible.CommandLine;
+namespace GrepCompatible.Abstractions.CommandLine;
 
 /// <summary>
 /// 引数（非オプション）の抽象基底クラス

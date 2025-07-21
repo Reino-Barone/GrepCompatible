@@ -1,6 +1,6 @@
-using GrepCompatible.Core;
-
 namespace GrepCompatible.Abstractions;
+
+
 
 /// <summary>
 /// ファイル探索とパターンマッチングを提供するサービス

@@ -1,8 +1,8 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.Constants;
-using GrepCompatible.Core;
+using GrepCompatible.Abstractions.Constants;
+namespace GrepCompatible.Abstractions.CommandLine;
 
-namespace GrepCompatible.CommandLine;
+
 
 /// <summary>
 /// Grepコマンドの具体実装

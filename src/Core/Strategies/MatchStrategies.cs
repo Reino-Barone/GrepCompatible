@@ -1,13 +1,14 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.Core;
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.Constants;
+
+
 using System.Collections.Concurrent;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
-namespace GrepCompatible.Strategies;
+namespace GrepCompatible.Core.Strategies;
 
 /// <summary>
 /// 固定文字列マッチング戦略（SIMD最適化）

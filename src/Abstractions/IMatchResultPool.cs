@@ -1,32 +1,30 @@
-using GrepCompatible.Core;
-
 namespace GrepCompatible.Abstractions;
 
 /// <summary>
-/// MatchResultのArrayPool管理を提供するサービス
+/// プールから配列をレンタルする際のインターフェース
 /// </summary>
 public interface IMatchResultPool
 {
     /// <summary>
-    /// プールされた配列を取得
+    /// 指定されたサイズで配列をレンタル
     /// </summary>
     /// <param name="estimatedSize">推定サイズ</param>
-    /// <returns>プールされた配列情報</returns>
+    /// <returns>プールされた配列</returns>
     PooledArray<MatchResult> Rent(int estimatedSize);
 
     /// <summary>
     /// プールされた配列にマッチを追加
     /// </summary>
-    /// <param name="pooledArray">プール配列</param>
-    /// <param name="match">追加するマッチ結果</param>
-    /// <param name="maxCount">最大カウント制限</param>
+    /// <param name="pooledArray">プールされた配列</param>
+    /// <param name="match">追加するマッチ</param>
+    /// <param name="maxCount">最大カウント（null許可）</param>
     void AddMatch(PooledArray<MatchResult> pooledArray, MatchResult match, int? maxCount = null);
 
     /// <summary>
-    /// プール配列からFileResultを作成
+    /// プールされた配列からFileResultを作成
     /// </summary>
     /// <param name="fileName">ファイル名</param>
-    /// <param name="pooledArray">プール配列</param>
+    /// <param name="pooledArray">プールされた配列</param>
     /// <returns>ファイル結果</returns>
     FileResult CreateFileResult(string fileName, PooledArray<MatchResult> pooledArray);
 
@@ -68,7 +66,7 @@ public class PooledArray<T> : IDisposable
     /// <param name="array">配列</param>
     /// <param name="size">サイズ</param>
     /// <param name="count">カウント</param>
-    internal PooledArray(IMatchResultPool pool, T[] array, int size, int count)
+    public PooledArray(IMatchResultPool pool, T[] array, int size, int count)
     {
         _pool = pool;
         Array = array;
@@ -79,7 +77,7 @@ public class PooledArray<T> : IDisposable
     /// <summary>
     /// 内部状態を更新（MatchResultPoolから使用）
     /// </summary>
-    internal void UpdateState(T[] array, int size, int count)
+    public void UpdateState(T[] array, int size, int count)
     {
         Array = array;
         Size = size;
@@ -89,7 +87,7 @@ public class PooledArray<T> : IDisposable
     /// <summary>
     /// カウントを増加
     /// </summary>
-    internal void IncrementCount()
+    public void IncrementCount()
     {
         Count++;
     }

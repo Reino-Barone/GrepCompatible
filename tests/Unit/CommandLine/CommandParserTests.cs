@@ -1,5 +1,5 @@
-using GrepCompatible.CommandLine;
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.CommandLine;
+using GrepCompatible.Abstractions.Constants;
 using Xunit;
 
 namespace GrepCompatible.Test.Unit.CommandLine;

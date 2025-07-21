@@ -1,8 +1,8 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.CommandLine;
+using GrepCompatible.Abstractions.CommandLine;
 using GrepCompatible.Core;
-using GrepCompatible.Strategies;
-using GrepCompatible.Constants;
+using GrepCompatible.Core.Strategies;
+using GrepCompatible.Abstractions.Constants;
 using Moq;
 using System.Text;
 using Xunit;

@@ -6,10 +6,10 @@ using System.Text;
 using System.Threading.Tasks;
 using GrepCompatible.Core;
 using GrepCompatible.Abstractions;
-using GrepCompatible.Strategies;
-using GrepCompatible.Constants;
+using GrepCompatible.Core.Strategies;
+using GrepCompatible.Abstractions.Constants;
 using GrepCompatible.Test.Infrastructure;
-using GrepCompatible.CommandLine;
+using GrepCompatible.Abstractions.CommandLine;
 using Xunit;
 using Xunit.Abstractions;
 

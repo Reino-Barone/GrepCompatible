@@ -1,9 +1,10 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.Core;
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.Constants;
+
+
 using System.Runtime.CompilerServices;
 
-namespace GrepCompatible.Strategies;
+namespace GrepCompatible.Core.Strategies;
 
 /// <summary>
 /// SIMD最適化された固定文字列マッチング戦略

@@ -1,5 +1,3 @@
-using GrepCompatible.Core;
-
 namespace GrepCompatible.Abstractions;
 
 /// <summary>

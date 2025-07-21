@@ -1,6 +1,6 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.CommandLine;
-using GrepCompatible.Strategies;
+using GrepCompatible.Abstractions.CommandLine;
+using GrepCompatible.Core.Strategies;
 
 namespace GrepCompatible.Core;
 

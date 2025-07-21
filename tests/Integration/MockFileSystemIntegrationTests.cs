@@ -1,9 +1,9 @@
 using GrepCompatible.Abstractions;
 using GrepCompatible.Core;
-using GrepCompatible.Strategies;
+using GrepCompatible.Core.Strategies;
 using GrepCompatible.Test.Infrastructure;
-using GrepCompatible.Constants;
-using GrepCompatible.CommandLine;
+using GrepCompatible.Abstractions.Constants;
+using GrepCompatible.Abstractions.CommandLine;
 using Moq;
 using System;
 using System.Collections.Generic;
