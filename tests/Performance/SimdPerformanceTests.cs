@@ -12,6 +12,7 @@ using GrepCompatible.Constants;
 using GrepCompatible.Test.Infrastructure;
 using GrepCompatible.CommandLine;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace GrepCompatible.Test.Performance;
 
@@ -20,8 +21,14 @@ namespace GrepCompatible.Test.Performance;
 /// </summary>
 public class SimdPerformanceTests
 {
+    private readonly ITestOutputHelper _output;
     private const int LargeFileLines = 100000;
     private const int TestIterations = 100;
+
+    public SimdPerformanceTests(ITestOutputHelper output)
+    {
+        _output = output;
+    }
     
     /// <summary>
     /// テスト用の大きなファイルを生成
@@ -119,11 +126,11 @@ public class SimdPerformanceTests
         var minTime = results.Min(t => t.TotalMilliseconds);
         var maxTime = results.Max(t => t.TotalMilliseconds);
         
-        Console.WriteLine($"Single char search '{pattern}' (ignoreCase: {ignoreCase}):");
-        Console.WriteLine($"  Average: {averageTime:F2} ms");
-        Console.WriteLine($"  Min: {minTime:F2} ms");
-        Console.WriteLine($"  Max: {maxTime:F2} ms");
-        Console.WriteLine($"  Total iterations: {TestIterations}");
+        _output.WriteLine($"Single char search '{pattern}' (ignoreCase: {ignoreCase}):");
+        _output.WriteLine($"  Average: {averageTime:F2} ms");
+        _output.WriteLine($"  Min: {minTime:F2} ms");
+        _output.WriteLine($"  Max: {maxTime:F2} ms");
+        _output.WriteLine($"  Total iterations: {TestIterations}");
         
         // 基本的なアサーション
         Assert.True(averageTime < 100, $"Average time {averageTime:F2} ms should be less than 100ms");
@@ -188,11 +195,11 @@ public class SimdPerformanceTests
         var minTime = results.Min(t => t.TotalMilliseconds);
         var maxTime = results.Max(t => t.TotalMilliseconds);
         
-        Console.WriteLine($"Short pattern search '{pattern}' (ignoreCase: {ignoreCase}):");
-        Console.WriteLine($"  Average: {averageTime:F2} ms");
-        Console.WriteLine($"  Min: {minTime:F2} ms");
-        Console.WriteLine($"  Max: {maxTime:F2} ms");
-        Console.WriteLine($"  Total iterations: {TestIterations}");
+        _output.WriteLine($"Short pattern search '{pattern}' (ignoreCase: {ignoreCase}):");
+        _output.WriteLine($"  Average: {averageTime:F2} ms");
+        _output.WriteLine($"  Min: {minTime:F2} ms");
+        _output.WriteLine($"  Max: {maxTime:F2} ms");
+        _output.WriteLine($"  Total iterations: {TestIterations}");
         
         // 基本的なアサーション
         Assert.True(averageTime < 200, $"Average time {averageTime:F2} ms should be less than 200ms");
@@ -266,10 +273,10 @@ public class SimdPerformanceTests
         var traditionalAverage = traditionalTimes.Average(t => t.TotalMilliseconds);
         var improvement = (traditionalAverage - simdAverage) / traditionalAverage * 100;
         
-        Console.WriteLine($"SIMD vs Traditional Strategy Comparison:");
-        Console.WriteLine($"  SIMD Average: {simdAverage:F2} ms");
-        Console.WriteLine($"  Traditional Average: {traditionalAverage:F2} ms");
-        Console.WriteLine($"  Improvement: {improvement:F1}%");
+        _output.WriteLine($"SIMD vs Traditional Strategy Comparison:");
+        _output.WriteLine($"  SIMD Average: {simdAverage:F2} ms");
+        _output.WriteLine($"  Traditional Average: {traditionalAverage:F2} ms");
+        _output.WriteLine($"  Improvement: {improvement:F1}%");
         
         // SIMD戦略が著しく遅くないことを確認（100%以上遅い場合のみ失敗）
         // 小さなファイル/短いパターンでは差が出にくいため、より緩い条件を設定
@@ -320,11 +327,11 @@ public class SimdPerformanceTests
         var finalMemory = GC.GetTotalMemory(true);
         var memoryUsed = finalMemory - initialMemory;
         
-        Console.WriteLine($"Large data memory efficiency test:");
-        Console.WriteLine($"  Processing time: {stopwatch.ElapsedMilliseconds} ms");
-        Console.WriteLine($"  Memory used: {memoryUsed / 1024 / 1024:F2} MB");
-        Console.WriteLine($"  Matches found: {result.TotalMatches}");
-        Console.WriteLine($"  Files processed: {result.TotalFiles}");
+        _output.WriteLine($"Large data memory efficiency test:");
+        _output.WriteLine($"  Processing time: {stopwatch.ElapsedMilliseconds} ms");
+        _output.WriteLine($"  Memory used: {memoryUsed / 1024 / 1024:F2} MB");
+        _output.WriteLine($"  Matches found: {result.TotalMatches}");
+        _output.WriteLine($"  Files processed: {result.TotalFiles}");
         
         // メモリ効率性の基本的なアサーション（より寛容な条件）
         Assert.True(memoryUsed < 500 * 1024 * 1024, // 500MB未満
