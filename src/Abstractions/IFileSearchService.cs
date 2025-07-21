@@ -1,4 +1,4 @@
-using GrepCompatible.Models;
+using GrepCompatible.Core;
 
 namespace GrepCompatible.Abstractions;
 

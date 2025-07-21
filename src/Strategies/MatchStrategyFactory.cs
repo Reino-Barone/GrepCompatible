@@ -1,5 +1,5 @@
 using GrepCompatible.Abstractions;
-using GrepCompatible.Models;
+using GrepCompatible.Core;
 
 namespace GrepCompatible.Strategies;
 

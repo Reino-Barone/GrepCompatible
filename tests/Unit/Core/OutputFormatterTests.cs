@@ -1,7 +1,6 @@
 using GrepCompatible.Abstractions;
 using GrepCompatible.Constants;
 using GrepCompatible.Core;
-using GrepCompatible.Models;
 using Moq;
 using System.Text;
 using Xunit;

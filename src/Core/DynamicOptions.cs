@@ -2,7 +2,7 @@ using GrepCompatible.Abstractions;
 using GrepCompatible.CommandLine;
 using GrepCompatible.Constants;
 
-namespace GrepCompatible.Models;
+namespace GrepCompatible.Core;
 
 /// <summary>
 /// オプションコンテキストの実装クラス

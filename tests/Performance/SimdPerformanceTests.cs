@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using GrepCompatible.Core;
-using GrepCompatible.Models;
 using GrepCompatible.Abstractions;
 using GrepCompatible.Strategies;
 using GrepCompatible.Constants;

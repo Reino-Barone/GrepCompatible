@@ -1,6 +1,6 @@
 using GrepCompatible.Abstractions;
 using GrepCompatible.Constants;
-using GrepCompatible.Models;
+using GrepCompatible.Core;
 using GrepCompatible.Strategies;
 using Moq;
 using Xunit;

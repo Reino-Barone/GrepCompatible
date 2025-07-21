@@ -1,5 +1,4 @@
 using GrepCompatible.Core;
-using GrepCompatible.Models;
 using GrepCompatible.Constants;
 using GrepCompatible.Abstractions;
 using GrepCompatible.Strategies;

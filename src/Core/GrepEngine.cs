@@ -1,6 +1,5 @@
 using GrepCompatible.Abstractions;
 using GrepCompatible.Constants;
-using GrepCompatible.Models;
 using GrepCompatible.Strategies;
 using System.Collections.Concurrent;
 using System.Diagnostics;
