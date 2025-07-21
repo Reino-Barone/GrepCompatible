@@ -1,6 +1,6 @@
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.Constants;
 
-namespace GrepCompatible.CommandLine;
+namespace GrepCompatible.Abstractions.CommandLine;
 
 /// <summary>
 /// フラグオプション（値を持たないオプション）

@@ -1,6 +1,7 @@
-using GrepCompatible.Models;
+using GrepCompatible.Abstractions;
+namespace GrepCompatible.Abstractions.CommandLine;
 
-namespace GrepCompatible.CommandLine;
+
 
 /// <summary>
 /// パース結果を表現するレコード

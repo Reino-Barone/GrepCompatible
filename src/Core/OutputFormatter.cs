@@ -1,5 +1,5 @@
-using GrepCompatible.Constants;
-using GrepCompatible.Models;
+using GrepCompatible.Abstractions;
+using GrepCompatible.Abstractions.Constants;
 using System.Buffers;
 using System.Text;
 
