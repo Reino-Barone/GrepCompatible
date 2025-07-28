@@ -87,7 +87,7 @@ public class PooledArray<T> : IDisposable
     /// <summary>
     /// カウントを増加
     /// </summary>
-    public void IncrementCount()
+    internal void IncrementCount()
     {
         Count++;
     }
