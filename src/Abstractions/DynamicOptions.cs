@@ -100,11 +100,9 @@ public class DynamicOptions : IOptionContext
     /// </summary>
     public IReadOnlyList<string> GetAllStringValues(OptionNames optionName)
     {
-        return _options.OfType<StringOption>()
-            .Where(o => o.Name == optionName)
-            .Select(o => o.Value)
-            .Where(v => !string.IsNullOrEmpty(v))
-            .ToList()
-            .AsReadOnly();
+        var stringOption = _options.OfType<StringOption>()
+            .FirstOrDefault(o => o.Name == optionName);
+            
+        return stringOption?.AllValues ?? new List<string>().AsReadOnly();
     }
 }

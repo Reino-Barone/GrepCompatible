@@ -32,20 +32,41 @@ public class FlagOption : Option<bool>
 /// </summary>
 public class StringOption : Option<string>
 {
+    private readonly List<string> _allValues = [];
+    
     public StringOption(OptionNames name, string description, string defaultValue = "", 
                        string? shortName = null, string? longName = null, bool isRequired = false) 
         : base(name, description, defaultValue, shortName, longName, isRequired)
     {
     }
     
+    /// <summary>
+    /// 指定されたオプションの全ての値を取得（複数指定対応）
+    /// </summary>
+    public IReadOnlyList<string> AllValues => _allValues.AsReadOnly();
+    
     public override bool TryParse(string? value)
     {
         if (value == null && IsRequired)
             return false;
         
-        Value = value ?? DefaultValue;
+        var actualValue = value ?? DefaultValue;
+        Value = actualValue;
+        
+        // 空でない値のみ蓄積
+        if (!string.IsNullOrEmpty(actualValue))
+        {
+            _allValues.Add(actualValue);
+        }
+        
         IsSet = true;
         return true;
+    }
+    
+    public override void Reset()
+    {
+        base.Reset();
+        _allValues.Clear();
     }
     
     public override string GetUsageString()
