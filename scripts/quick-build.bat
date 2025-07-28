@@ -1,4 +1,5 @@
 @echo off
+setlocal EnableDelayedExpansion
 REM Quick build script for GrepCompatible Windows executable
 
 echo Building GrepCompatible for Windows...
