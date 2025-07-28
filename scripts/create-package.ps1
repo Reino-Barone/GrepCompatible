@@ -207,4 +207,8 @@ Get-ChildItem -Path $OutputDir -Recurse | ForEach-Object {
 }
 
 Write-Host "`nTo create a ZIP archive:" -ForegroundColor Cyan
-Write-Host "Compress-Archive -Path '$OutputDir\*' -DestinationPath 'GrepCompatible-$Runtime.zip'" -ForegroundColor White
+if ($IncludeAllRuntimes) {
+    Write-Host "Compress-Archive -Path '$OutputDir\*' -DestinationPath 'GrepCompatible-all-runtimes.zip'" -ForegroundColor White
+} else {
+    Write-Host "Compress-Archive -Path '$OutputDir\*' -DestinationPath 'GrepCompatible-$Runtime.zip'" -ForegroundColor White
+}
