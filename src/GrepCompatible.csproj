@@ -8,6 +8,12 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UseSystemTextJson>true</UseSystemTextJson>
     <Optimize>true</Optimize>
+    <AssemblyName>grep</AssemblyName>
+    <Product>GrepCompatible</Product>
+    <AssemblyTitle>GrepCompatible</AssemblyTitle>
+    <AssemblyDescription>High-performance POSIX-compliant grep implementation</AssemblyDescription>
+    <Copyright>Copyright © 2025</Copyright>
+    <Version>0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -22,6 +28,14 @@
     <None Remove="Abstractions\**" />
     <None Remove="Core\**" />
   </ItemGroup>
+
+  <!-- Self-contained publishing configuration -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <DebugType>none</DebugType>
