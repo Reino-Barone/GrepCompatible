@@ -77,7 +77,7 @@ public class PooledArray<T> : IDisposable
     /// <summary>
     /// 内部状態を更新（MatchResultPoolから使用）
     /// </summary>
-    public void UpdateState(T[] array, int size, int count)
+    internal void UpdateState(T[] array, int size, int count)
     {
         Array = array;
         Size = size;
