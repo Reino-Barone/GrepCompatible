@@ -1,4 +1,4 @@
-namespace GrepCompatible.Models;
+namespace GrepCompatible.Abstractions;
 
 /// <summary>
 /// マッチ結果を表現するレコード

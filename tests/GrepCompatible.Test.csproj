@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\src\GrepCompatible.csproj" />
+    <ProjectReference Include="..\src\Core\GrepCompatible.Core.csproj" />
   </ItemGroup>
 
 </Project>

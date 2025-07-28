@@ -1,7 +1,7 @@
-using GrepCompatible.CommandLine;
-using GrepCompatible.Constants;
+using GrepCompatible.Abstractions.CommandLine;
+using GrepCompatible.Abstractions.Constants;
 
-namespace GrepCompatible.Models;
+namespace GrepCompatible.Abstractions;
 
 /// <summary>
 /// オプションコンテキストのインターフェース

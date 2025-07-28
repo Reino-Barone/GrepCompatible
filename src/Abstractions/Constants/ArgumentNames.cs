@@ -1,4 +1,4 @@
-namespace GrepCompatible.Constants;
+namespace GrepCompatible.Abstractions.Constants;
 
 /// <summary>
 /// 引数名の列挙型定義
