@@ -66,7 +66,7 @@ public class PooledArray<T> : IDisposable
     /// <param name="array">配列</param>
     /// <param name="size">サイズ</param>
     /// <param name="count">カウント</param>
-    public PooledArray(IMatchResultPool pool, T[] array, int size, int count)
+    internal PooledArray(IMatchResultPool pool, T[] array, int size, int count)
     {
         _pool = pool;
         Array = array;
