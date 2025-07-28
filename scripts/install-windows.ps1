@@ -128,8 +128,8 @@ Write-Host "✓ Copied executable to: $destinationPath" -ForegroundColor Green
 
 # Verify the executable works
 try {
-    $version = & $destinationPath --help | Select-Object -First 1
-    Write-Host "✓ Executable verified: $version" -ForegroundColor Green
+    $helpOutput = & $destinationPath --help | Select-Object -First 1
+    Write-Host "✓ Executable verified: $helpOutput" -ForegroundColor Green
 } catch {
     Write-Warning "Could not verify executable, but installation completed."
 }
