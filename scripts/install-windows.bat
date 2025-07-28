@@ -54,8 +54,9 @@ echo Installing %APP_NAME%...
 REM Find executable
 set "EXE_PATH="
 set "SCRIPT_DIR=%~dp0"
+if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 
-if exist "%SCRIPT_DIR%..\dist\win-x64\%EXE_NAME%" (
+if exist "%SCRIPT_DIR%\..\dist\win-x64\%EXE_NAME%" (
     set "EXE_PATH=%SCRIPT_DIR%..\dist\win-x64\%EXE_NAME%"
 ) else if exist "%SCRIPT_DIR%..\dist\win-x86\%EXE_NAME%" (
     set "EXE_PATH=%SCRIPT_DIR%..\dist\win-x86\%EXE_NAME%"
